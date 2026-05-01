@@ -113,8 +113,13 @@ export default function Wall() {
     let lastMoveX = 0
     let lastMoveT = 0
 
+    const DRAG_FACTOR = 3.0 // scene units per pixel of mouse drag
+
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return
+      // Cancel any leftover continuous pan from a side-arrow button whose
+      // pointerup may not have fired (e.g. tab focus changed mid-press).
+      panDir = 0
       dragging = true
       dragPointerId = e.pointerId
       dragStartClientX = e.clientX
@@ -130,13 +135,13 @@ export default function Wall() {
       if (!dragging || e.pointerId !== dragPointerId) return
       const dx = e.clientX - dragStartClientX
       // Drag-the-camera: mouse right → camera right (matches yaw direction).
-      cam.targetX = clampX(dragStartTargetX + dx * 1.5)
+      cam.targetX = clampX(dragStartTargetX + dx * DRAG_FACTOR)
 
       const now = performance.now()
       const dt = now - lastMoveT
       if (dt > 0) {
         // velocity in scene-units per ms
-        cam.velocityX = ((e.clientX - lastMoveX) * 1.5) / dt
+        cam.velocityX = ((e.clientX - lastMoveX) * DRAG_FACTOR) / dt
       }
       lastMoveX = e.clientX
       lastMoveT = now
