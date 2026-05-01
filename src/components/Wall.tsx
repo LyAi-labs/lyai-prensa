@@ -98,7 +98,7 @@ export default function Wall() {
     const BASE_Z = 1500
     const MIN_Z = 600
     const MAX_Z = 3000
-    const MAX_YAW = THREE.MathUtils.degToRad(22)
+    const MAX_YAW = THREE.MathUtils.degToRad(45)
     const YAW_DX_SATURATION = 80 // scene units per 60fps frame
     const PAN_SPEED = 14 // scene units per 60fps frame while a side-arrow is held
     let cameraYaw = 0
@@ -230,10 +230,13 @@ export default function Wall() {
         dt > 0.001 ? (camera.position.x - prevCamX) / dt : 0
       prevCamX = camera.position.x
 
-      const yawT = Math.max(
-        -1,
-        Math.min(1, dxPerFrame / YAW_DX_SATURATION),
-      )
+      // While a side-arrow is held, force yaw to its extreme so the
+      // sweep reaches the end of the wall. Otherwise derive yaw from
+      // visible horizontal velocity (drag, wheel, flick momentum).
+      const yawT =
+        panDir !== 0
+          ? panDir
+          : Math.max(-1, Math.min(1, dxPerFrame / YAW_DX_SATURATION))
       // Moving right (dx > 0) → camera looks right (rotation.y < 0 in three.js)
       const targetYaw = -yawT * MAX_YAW
       const yawEasing = 1 - Math.pow(1 - 0.12, dt)
