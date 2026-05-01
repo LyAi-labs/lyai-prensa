@@ -19,6 +19,7 @@ export default function Wall() {
   const containerRef = useRef<HTMLDivElement>(null)
   const panLeftRef = useRef<() => void>(() => {})
   const panRightRef = useRef<() => void>(() => {})
+  const panStopRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     const container = containerRef.current
@@ -90,17 +91,20 @@ export default function Wall() {
       velocityX: 0,
     }
 
-    // ── Cooliris-style camera yaw ────────────────────────────────────
-    // Camera pivots toward the direction of motion (yaw) plus a tiny Z
-    // pull-back to enhance the perspective sweep. Driven by the actual
-    // per-frame velocity of camera.position.x, so it unifies drag, wheel,
-    // momentum and arrow buttons. Returns to 0 when motion stops.
+    // Cooliris-style camera yaw: camera rotates around its own vertical
+    // axis toward the direction of motion. Driven by the per-frame
+    // velocity of camera.position.x, so it covers drag, wheel, momentum
+    // and the (held) arrow buttons. Returns to 0 when motion stops.
     const BASE_Z = 1500
+    const MIN_Z = 600
+    const MAX_Z = 3000
     const MAX_YAW = THREE.MathUtils.degToRad(22)
-    const MAX_PULLBACK_Z = 100
     const YAW_DX_SATURATION = 80 // scene units per 60fps frame
+    const PAN_SPEED = 14 // scene units per 60fps frame while a side-arrow is held
     let cameraYaw = 0
     let prevCamX = 0
+    let targetZ = BASE_Z
+    let panDir = 0 // -1 left, 0 idle, +1 right (driven by side-arrow buttons)
 
     let dragging = false
     let dragPointerId: number | null = null
@@ -152,16 +156,24 @@ export default function Wall() {
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const delta =
-        Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-      cam.targetX = clampX(cam.targetX + delta * 1.4)
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd + wheel → dolly zoom along Z (also catches trackpad pinch).
+        targetZ = Math.max(MIN_Z, Math.min(MAX_Z, targetZ + e.deltaY * 1.5))
+      } else {
+        const delta =
+          Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+        cam.targetX = clampX(cam.targetX + delta * 1.4)
+      }
     }
 
     panLeftRef.current = () => {
-      cam.targetX = clampX(cam.targetX - (TILE_W + GAP_X) * 4)
+      panDir = -1
     }
     panRightRef.current = () => {
-      cam.targetX = clampX(cam.targetX + (TILE_W + GAP_X) * 4)
+      panDir = 1
+    }
+    panStopRef.current = () => {
+      panDir = 0
     }
 
     container.addEventListener('pointerdown', onPointerDown)
@@ -190,24 +202,30 @@ export default function Wall() {
       const dt = Math.min((now - lastTime) / 16.6667, 4)
       lastTime = now
 
-      // Frame-independent exponential smoothing.
-      // 0.18 is the per-60fps-frame ratio toward the target.
+      // Continuous pan while a side-arrow button is held.
+      if (panDir !== 0) {
+        cam.targetX = clampX(cam.targetX + panDir * PAN_SPEED * dt)
+      }
+
+      // Frame-independent exponential smoothing toward targetX/targetZ.
       const easing = 1 - Math.pow(1 - 0.18, dt)
       const cur = camera.position.x
       const next = cur + (cam.targetX - cur) * easing
-      // Snap when close, to avoid jitter.
-      if (Math.abs(cam.targetX - next) < 0.05) {
-        camera.position.x = cam.targetX
-      } else {
-        camera.position.x = next
-      }
+      camera.position.x =
+        Math.abs(cam.targetX - next) < 0.05 ? cam.targetX : next
+
+      const zCur = camera.position.z
+      const zNext = zCur + (targetZ - zCur) * easing
+      camera.position.z =
+        Math.abs(targetZ - zNext) < 0.05 ? targetZ : zNext
 
       // Decay residual velocity when not dragging.
       if (!dragging) {
         cam.velocityX *= Math.pow(0.9, dt)
       }
 
-      // Yaw + Z based on the camera's actual visible velocity.
+      // Pure yaw on the camera's vertical axis, driven by visible
+      // horizontal velocity. Camera does not translate sideways or in Z.
       const dxPerFrame =
         dt > 0.001 ? (camera.position.x - prevCamX) / dt : 0
       prevCamX = camera.position.x
@@ -227,8 +245,6 @@ export default function Wall() {
         cameraYaw = 0
       }
       camera.rotation.y = cameraYaw
-      camera.position.z =
-        BASE_Z + (Math.abs(cameraYaw) / MAX_YAW) * MAX_PULLBACK_Z
 
       renderer.render(scene, camera)
     }
@@ -269,14 +285,26 @@ export default function Wall() {
 
       <button
         className="wall-arrow wall-arrow-left"
-        onClick={() => panLeftRef.current()}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId)
+          panLeftRef.current()
+        }}
+        onPointerUp={() => panStopRef.current()}
+        onPointerCancel={() => panStopRef.current()}
+        onContextMenu={(e) => e.preventDefault()}
         aria-label="Ir atrás en el tiempo"
       >
         ‹
       </button>
       <button
         className="wall-arrow wall-arrow-right"
-        onClick={() => panRightRef.current()}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId)
+          panRightRef.current()
+        }}
+        onPointerUp={() => panStopRef.current()}
+        onPointerCancel={() => panStopRef.current()}
+        onContextMenu={(e) => e.preventDefault()}
         aria-label="Avanzar en el tiempo"
       >
         ›
