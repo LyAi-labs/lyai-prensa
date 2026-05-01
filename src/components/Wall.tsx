@@ -129,13 +129,14 @@ export default function Wall() {
     const onPointerMove = (e: PointerEvent) => {
       if (!dragging || e.pointerId !== dragPointerId) return
       const dx = e.clientX - dragStartClientX
-      cam.targetX = clampX(dragStartTargetX - dx * 1.5)
+      // Drag-the-camera: mouse right → camera right (matches yaw direction).
+      cam.targetX = clampX(dragStartTargetX + dx * 1.5)
 
       const now = performance.now()
       const dt = now - lastMoveT
       if (dt > 0) {
         // velocity in scene-units per ms
-        cam.velocityX = -((e.clientX - lastMoveX) * 1.5) / dt
+        cam.velocityX = ((e.clientX - lastMoveX) * 1.5) / dt
       }
       lastMoveX = e.clientX
       lastMoveT = now
