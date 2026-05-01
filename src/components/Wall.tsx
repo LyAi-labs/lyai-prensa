@@ -90,6 +90,18 @@ export default function Wall() {
       velocityX: 0,
     }
 
+    // ── Cooliris-style camera yaw ────────────────────────────────────
+    // Camera pivots toward the direction of motion (yaw) plus a tiny Z
+    // pull-back to enhance the perspective sweep. Driven by the actual
+    // per-frame velocity of camera.position.x, so it unifies drag, wheel,
+    // momentum and arrow buttons. Returns to 0 when motion stops.
+    const BASE_Z = 1500
+    const MAX_YAW = THREE.MathUtils.degToRad(22)
+    const MAX_PULLBACK_Z = 100
+    const YAW_DX_SATURATION = 80 // scene units per 60fps frame
+    let cameraYaw = 0
+    let prevCamX = 0
+
     let dragging = false
     let dragPointerId: number | null = null
     let dragStartClientX = 0
@@ -194,6 +206,29 @@ export default function Wall() {
       if (!dragging) {
         cam.velocityX *= Math.pow(0.9, dt)
       }
+
+      // Yaw + Z based on the camera's actual visible velocity.
+      const dxPerFrame =
+        dt > 0.001 ? (camera.position.x - prevCamX) / dt : 0
+      prevCamX = camera.position.x
+
+      const yawT = Math.max(
+        -1,
+        Math.min(1, dxPerFrame / YAW_DX_SATURATION),
+      )
+      // Moving right (dx > 0) → camera looks right (rotation.y < 0 in three.js)
+      const targetYaw = -yawT * MAX_YAW
+      const yawEasing = 1 - Math.pow(1 - 0.12, dt)
+      cameraYaw += (targetYaw - cameraYaw) * yawEasing
+      if (
+        Math.abs(cameraYaw) < 0.0005 &&
+        Math.abs(targetYaw) < 0.0005
+      ) {
+        cameraYaw = 0
+      }
+      camera.rotation.y = cameraYaw
+      camera.position.z =
+        BASE_Z + (Math.abs(cameraYaw) / MAX_YAW) * MAX_PULLBACK_Z
 
       renderer.render(scene, camera)
     }
