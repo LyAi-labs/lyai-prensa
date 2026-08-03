@@ -1,10 +1,12 @@
 # Deploy de lyai-prensa detrás de Traefik en 178.63.165.87.
 # DNS: prensa.lyai.es → 178.63.165.87 (A record, TTL 300).
 #
-# Ajustar según tu Traefik si difiere:
-#   - Nombre de la red externa (aquí: `traefik`).
+# Red externa confirmada: `traefik_traefik` (docker network ls en el server).
+# Pendiente de confirmar contra la config estática de Traefik:
 #   - Entrypoint HTTPS (aquí: `websecure`).
 #   - Certresolver de Let's Encrypt (aquí: `letsencrypt`).
+# Si el certresolver no coincide con uno declarado en traefik.yml, Traefik
+# sirve su cert self-signed y el navegador da ERR_CERT_AUTHORITY_INVALID.
 #
 # Uso:
 #   git pull
@@ -23,7 +25,7 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik"
+      - "traefik.docker.network=traefik_traefik"
 
       # Router HTTP → redirige a HTTPS.
       - "traefik.http.routers.prensa.rule=Host(`prensa.lyai.es`)"
@@ -42,3 +44,4 @@ services:
 networks:
   traefik:
     external: true
+    name: traefik_traefik
