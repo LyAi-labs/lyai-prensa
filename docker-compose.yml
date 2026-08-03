@@ -1,19 +1,19 @@
 # Deploy de lyai-prensa detrás de Traefik en 178.63.165.87.
 # DNS: prensa.lyai.es → 178.63.165.87 (A record, TTL 300).
 #
-# Red externa confirmada: `traefik_traefik` (docker network ls en el server).
-# Pendiente de confirmar contra la config estática de Traefik:
-#   - Entrypoint HTTPS (aquí: `websecure`).
-#   - Certresolver de Let's Encrypt (aquí: `letsencrypt`).
-# Si el certresolver no coincide con uno declarado en traefik.yml, Traefik
-# sirve su cert self-signed y el navegador da ERR_CERT_AUTHORITY_INVALID.
+# Valores confirmados contra /home/lyai/traefik/config/traefik.yml y contra
+# los servicios que ya funcionan (dnb-api, agents-hub):
+#   - red externa:  traefik_traefik
+#   - entrypoints:  web (:80) y websecure
+#   - certresolver: letsencrypt
+#
+# Las labels replican el patrón de esos servicios: un único router en
+# websecure con tls.certresolver. Traefik atiende el challenge ACME por su
+# cuenta en el entrypoint web, no hace falta un router HTTP propio.
 #
 # Uso:
 #   git pull
 #   docker compose up -d --build
-#
-# Primer arranque: Traefik pide un cert a Let's Encrypt (HTTP-01 challenge
-# necesita el puerto 80 abierto en el firewall de la máquina).
 
 services:
   prensa:
@@ -25,20 +25,9 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik_traefik"
-
-      # Router HTTP → redirige a HTTPS.
       - "traefik.http.routers.prensa.rule=Host(`prensa.lyai.es`)"
-      - "traefik.http.routers.prensa.entrypoints=web"
-      - "traefik.http.routers.prensa.middlewares=prensa-https-redirect"
-      - "traefik.http.middlewares.prensa-https-redirect.redirectscheme.scheme=https"
-
-      # Router HTTPS con Let's Encrypt.
-      - "traefik.http.routers.prensa-secure.rule=Host(`prensa.lyai.es`)"
-      - "traefik.http.routers.prensa-secure.entrypoints=websecure"
-      - "traefik.http.routers.prensa-secure.tls=true"
-      - "traefik.http.routers.prensa-secure.tls.certresolver=letsencrypt"
-
+      - "traefik.http.routers.prensa.entrypoints=websecure"
+      - "traefik.http.routers.prensa.tls.certresolver=letsencrypt"
       - "traefik.http.services.prensa.loadbalancer.server.port=80"
 
 networks:
