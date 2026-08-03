@@ -14,12 +14,13 @@ const RADIUS = 10
 const WALL_W = COLS * TILE_W + (COLS - 1) * GAP_X
 const WALL_H = ROWS * TILE_H + (ROWS - 1) * GAP_Y
 
-// Spring físico crítico-amortiguado suave — reemplaza el `1 - Math.pow(1 - factor, dt)`
-// exponencial por un muelle real con inercia. Ajustar con feel:
-const SPRING_STIFFNESS = 90 // más = tira más fuerte al target
-const SPRING_DAMPING = 14 // más = menos oscilación
-const YAW_MAX = 0.28 // rad, ≈16°
-const YAW_VELOCITY_SATURATION = 1400 // px/s a los que el yaw satura
+// Inercia Newton pura: la velocidad decae por fricción exponencial hacia 0,
+// sin rebote. Es la sensación de Cooliris — un flick sigue moviéndose y se
+// para, no oscila. El "target" se elimina del modelo: el drag setea velocidad
+// y a partir de ahí es todo integración.
+const FRICTION = 2.6 // s⁻¹, coef de fricción exponencial (mayor = para antes)
+const YAW_MAX = 0.22 // rad, ≈12.5°
+const YAW_VELOCITY_SATURATION = 1600 // px/s a los que el yaw satura
 
 type CardMeta = { g: Graphics; item: NewsItem; row: number; col: number; baseX: number }
 
@@ -85,10 +86,9 @@ export default function WallPixi() {
         }
       }
 
-      // Estado del scroll y del muelle.
-      let targetX = 0 // objetivo en coords "cámara"
-      let posX = 0 // posición actual (muelle)
-      let velX = 0 // velocidad (px/s)
+      // Estado del scroll: solo posición y velocidad (modelo Newton).
+      let posX = 0
+      let velX = 0
       let yaw = 0
 
       const layout = () => {
@@ -109,11 +109,22 @@ export default function WallPixi() {
       let lastPointerT = 0
       app.canvas.style.touchAction = 'none'
 
+      // Ventana de muestras para calcular velocidad de release (más estable
+      // que usar solo el último delta, que suele ser 0 si el usuario paró).
+      const samples: Array<{ t: number; x: number }> = []
+      const pushSample = (t: number, x: number) => {
+        samples.push({ t, x })
+        const cutoff = t - 80 // ms
+        while (samples.length && samples[0].t < cutoff) samples.shift()
+      }
+
       const onPointerDown = (e: PointerEvent) => {
         dragging = true
         lastPointerX = e.clientX
         lastPointerT = performance.now()
-        velX = 0
+        samples.length = 0
+        pushSample(lastPointerT, e.clientX)
+        velX = 0 // el drag inmediatamente mata la inercia previa
         ;(e.target as Element).setPointerCapture?.(e.pointerId)
       }
       const onPointerMove = (e: PointerEvent) => {
@@ -121,23 +132,27 @@ export default function WallPixi() {
         const dx = e.clientX - lastPointerX
         lastPointerX = e.clientX
         const now = performance.now()
-        const dt = Math.max(1, now - lastPointerT) / 1000
         lastPointerT = now
-        // Drag mueve la cámara en dirección contraria al puntero (agarras el muro).
-        targetX = clamp(targetX - dx)
-        // Actualiza inmediatamente la velocidad para que el yaw responda.
-        velX = -dx / dt
+        pushSample(now, e.clientX)
+        // Drag mueve directamente la posición 1:1 (agarras el muro).
+        posX = clamp(posX - dx)
       }
       const onPointerUp = () => {
         if (!dragging) return
         dragging = false
-        // Momentum: proyecta la velocidad actual sobre el target.
-        targetX = clamp(targetX + velX * 0.25)
+        // Velocidad de release = pendiente de las últimas ~80 ms de muestras.
+        if (samples.length >= 2) {
+          const first = samples[0]
+          const last = samples[samples.length - 1]
+          const dt = (last.t - first.t) / 1000
+          if (dt > 0) velX = -(last.x - first.x) / dt
+        }
       }
       const onWheel = (e: WheelEvent) => {
         e.preventDefault()
         const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-        targetX = clamp(targetX + delta)
+        // Wheel inyecta velocidad, la fricción se encarga de decaer.
+        velX += delta * 15
       }
 
       app.canvas.addEventListener('pointerdown', onPointerDown)
@@ -145,27 +160,34 @@ export default function WallPixi() {
       window.addEventListener('pointerup', onPointerUp)
       app.canvas.addEventListener('wheel', onWheel, { passive: false })
 
-      // Loop: integra el muelle y aplica yaw.
+      // Loop: integra Newton (posición + velocidad × fricción) sin muelle.
       app.ticker.add((t) => {
         const dt = Math.min(0.05, t.deltaMS / 1000)
 
-        // Muelle explícito: fuerza hacia target, amortiguación por velocidad.
-        const force = (targetX - posX) * SPRING_STIFFNESS
-        velX += force * dt
-        // amortiguación exponencial (equivalente a f = -damping*v integrado):
-        velX *= Math.exp(-SPRING_DAMPING * dt)
-        posX += velX * dt
+        if (!dragging) {
+          // Solo cuando NO estamos arrastrando: aplica la inercia.
+          posX += velX * dt
+          velX *= Math.exp(-FRICTION * dt)
+          if (Math.abs(velX) < 0.5) velX = 0
+          // Rebote elástico solo si se sale de los límites (no como resorte).
+          if (posX < 0) {
+            posX = 0
+            velX = 0
+          } else if (posX > maxScroll) {
+            posX = maxScroll
+            velX = 0
+          }
+        }
 
         // Yaw derivado de la velocidad visible (sensación Cooliris).
-        const yawT = Math.max(-1, Math.min(1, velX / YAW_VELOCITY_SATURATION))
+        const effVel = dragging ? -((samples.at(-1)?.x ?? 0) - (samples.at(0)?.x ?? 0)) / 0.08 : velX
+        const yawT = Math.max(-1, Math.min(1, effVel / YAW_VELOCITY_SATURATION))
         const targetYaw = -yawT * YAW_MAX
-        // suavizado exponencial del yaw para que no salte.
-        yaw += (targetYaw - yaw) * (1 - Math.exp(-12 * dt))
+        yaw += (targetYaw - yaw) * (1 - Math.exp(-14 * dt))
 
         wall.position.x = -posX
         scene.rotation = yaw
-        // pequeño pull-back con yaw (efecto barrido).
-        scene.scale.set(1 - Math.abs(yaw) * 0.06)
+        scene.scale.set(1 - Math.abs(yaw) * 0.05)
       })
 
       const onResize = () => layout()
