@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - claude/review-repo-branch-QgjvG
+      - claude/resume-session-xLdtE
   workflow_dispatch:
 
 permissions:
