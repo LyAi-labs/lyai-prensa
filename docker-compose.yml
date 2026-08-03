@@ -1,0 +1,44 @@
+# Deploy de lyai-prensa detrás de Traefik en 178.63.165.87.
+# DNS: prensa.lyai.es → 178.63.165.87 (A record, TTL 300).
+#
+# Ajustar según tu Traefik si difiere:
+#   - Nombre de la red externa (aquí: `traefik`).
+#   - Entrypoint HTTPS (aquí: `websecure`).
+#   - Certresolver de Let's Encrypt (aquí: `letsencrypt`).
+#
+# Uso:
+#   git pull
+#   docker compose up -d --build
+#
+# Primer arranque: Traefik pide un cert a Let's Encrypt (HTTP-01 challenge
+# necesita el puerto 80 abierto en el firewall de la máquina).
+
+services:
+  prensa:
+    build: .
+    image: lyai-prensa:latest
+    container_name: lyai_prensa
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+
+      # Router HTTP → redirige a HTTPS.
+      - "traefik.http.routers.prensa.rule=Host(`prensa.lyai.es`)"
+      - "traefik.http.routers.prensa.entrypoints=web"
+      - "traefik.http.routers.prensa.middlewares=prensa-https-redirect"
+      - "traefik.http.middlewares.prensa-https-redirect.redirectscheme.scheme=https"
+
+      # Router HTTPS con Let's Encrypt.
+      - "traefik.http.routers.prensa-secure.rule=Host(`prensa.lyai.es`)"
+      - "traefik.http.routers.prensa-secure.entrypoints=websecure"
+      - "traefik.http.routers.prensa-secure.tls=true"
+      - "traefik.http.routers.prensa-secure.tls.certresolver=letsencrypt"
+
+      - "traefik.http.services.prensa.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
