@@ -1,5 +1,5 @@
-import WallPixi from './components/WallPixi'
+import WallGL from './components/WallGL'
 
 export default function App() {
-  return <WallPixi />
+  return <WallGL />
 }

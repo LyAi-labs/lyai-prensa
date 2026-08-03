@@ -180,7 +180,10 @@ export default function WallPixi() {
         }
 
         // Yaw derivado de la velocidad visible (sensación Cooliris).
-        const effVel = dragging ? -((samples.at(-1)?.x ?? 0) - (samples.at(0)?.x ?? 0)) / 0.08 : velX
+        const effVel =
+          dragging && samples.length >= 2
+            ? -(samples[samples.length - 1].x - samples[0].x) / 0.08
+            : velX
         const yawT = Math.max(-1, Math.min(1, effVel / YAW_VELOCITY_SATURATION))
         const targetYaw = -yawT * YAW_MAX
         yaw += (targetYaw - yaw) * (1 - Math.exp(-14 * dt))
