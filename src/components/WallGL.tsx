@@ -27,6 +27,10 @@ const ZOOM_EASING = 10
 
 // Inercia Newton: sin muelle, sin rebote. Un flick decae hasta parar.
 const FRICTION = 2.6
+// Filtra el jitter de un ratón/trackpad real (los pointermove nunca llegan a
+// ritmo perfectamente uniforme) sin introducir lag perceptible: a 60fps cada
+// frame recorre ~85% de la distancia restante, imperceptible como retraso.
+const RENDER_SMOOTH = 55
 const YAW_MAX = 0.3 // rad ≈ 17°, la cámara gira hacia la dirección de marcha
 const YAW_VELOCITY_SATURATION = 1800
 const YAW_EASING = 14
@@ -179,7 +183,8 @@ export default function WallGL() {
     }
 
     // ---- Física: posición + velocidad, fricción exponencial. Sin muelle.
-    let posX = 0
+    let posX = 0 // posición "objetivo": 1:1 con el cursor durante el drag
+    let renderX = 0 // posición realmente pintada: persigue a posX, filtra jitter
     let velX = 0
     let yaw = 0
     let zoomTarget = 0
@@ -287,17 +292,27 @@ export default function WallGL() {
       }
 
       // Yaw: la cámara gira hacia donde se mueve, como Cooliris. Durante el
-      // drag se deriva de las muestras del puntero; tras soltar, de velX.
-      const effVel =
-        dragging && samples.length >= 2
-          ? (-(samples[samples.length - 1].x - samples[0].x) / 0.08) * worldPerPixel()
-          : velX
+      // drag se deriva de las muestras del puntero (dividiendo por el tiempo
+      // REAL que abarcan, no por una constante — el ratón no llega a ritmo
+      // fijo, y dividir siempre por 80ms daba una velocidad errática y
+      // hacía vibrar el yaw y el retroceso en Z). Tras soltar, se usa velX,
+      // que ya integra de forma continua en el propio tick.
+      let effVel = velX
+      if (dragging && samples.length >= 2) {
+        const first = samples[0]
+        const last = samples[samples.length - 1]
+        const dtSample = (last.t - first.t) / 1000
+        if (dtSample > 0.001) {
+          effVel = (-(last.x - first.x) / dtSample) * worldPerPixel()
+        }
+      }
       const yawT = Math.max(-1, Math.min(1, effVel / YAW_VELOCITY_SATURATION))
       yaw += (-yawT * YAW_MAX - yaw) * (1 - Math.exp(-YAW_EASING * dt))
 
       zoomCurrent += (zoomTarget - zoomCurrent) * (1 - Math.exp(-ZOOM_EASING * dt))
+      renderX += (posX - renderX) * (1 - Math.exp(-RENDER_SMOOTH * dt))
 
-      camera.position.x = posX
+      camera.position.x = renderX
       camera.position.z = CAM_Z + zoomCurrent + Math.abs(yaw / YAW_MAX) * PULLBACK_Z
       camera.rotation.y = yaw
 
