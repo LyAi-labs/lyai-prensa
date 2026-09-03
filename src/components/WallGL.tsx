@@ -18,6 +18,13 @@ const WALL_W = COLS * STEP_X - GAP_X
 const CAM_Z = 1500
 const FOV = 40
 
+// Zoom con la rueda: dolly de la cámara en Z, suavizado, con límites para no
+// atravesar las tarjetas ni alejarse tanto que se pierda el efecto 3D.
+const ZOOM_MIN = -950 // cámara más cerca (CAM_Z + esto)
+const ZOOM_MAX = 1300 // cámara más lejos
+const ZOOM_SPEED = 0.6 // world units por unidad de deltaY
+const ZOOM_EASING = 10
+
 // Inercia Newton: sin muelle, sin rebote. Un flick decae hasta parar.
 const FRICTION = 2.6
 const YAW_MAX = 0.3 // rad ≈ 17°, la cámara gira hacia la dirección de marcha
@@ -175,6 +182,8 @@ export default function WallGL() {
     let posX = 0
     let velX = 0
     let yaw = 0
+    let zoomTarget = 0
+    let zoomCurrent = 0
     const maxX = WALL_W / 2 - 200
     const minX = -maxX
     const clamp = (v: number) => Math.max(minX, Math.min(maxX, v))
@@ -190,7 +199,9 @@ export default function WallGL() {
     // Escala mundo↔pantalla: cuánto se mueve el mundo por píxel de arrastre,
     // para que el muro siga al cursor 1:1 en el plano z=0.
     const worldPerPixel = () => {
-      const vh = 2 * Math.tan((FOV * Math.PI) / 180 / 2) * CAM_Z
+      // Usa la distancia de cámara EFECTIVA (con zoom aplicado) para que el
+      // arrastre siga siendo 1:1 con el cursor a cualquier nivel de zoom.
+      const vh = 2 * Math.tan((FOV * Math.PI) / 180 / 2) * (CAM_Z + zoomCurrent)
       return vh / host.clientHeight
     }
 
@@ -224,8 +235,19 @@ export default function WallGL() {
     }
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-      velX += d * 12
+      // Swipe horizontal de trackpad, o Shift+rueda (convención estándar
+      // para paneo en ratones sin rueda horizontal) → paneo lateral.
+      const isPan = Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey
+      if (isPan) {
+        const d = e.shiftKey && Math.abs(e.deltaX) <= Math.abs(e.deltaY) ? e.deltaY : e.deltaX
+        velX += d * 12
+      } else {
+        // Rueda vertical normal → zoom (dolly de cámara en Z).
+        zoomTarget = Math.max(
+          ZOOM_MIN,
+          Math.min(ZOOM_MAX, zoomTarget + e.deltaY * ZOOM_SPEED),
+        )
+      }
     }
 
     el.addEventListener('pointerdown', onDown)
@@ -267,8 +289,10 @@ export default function WallGL() {
       const yawT = Math.max(-1, Math.min(1, effVel / YAW_VELOCITY_SATURATION))
       yaw += (-yawT * YAW_MAX - yaw) * (1 - Math.exp(-YAW_EASING * dt))
 
+      zoomCurrent += (zoomTarget - zoomCurrent) * (1 - Math.exp(-ZOOM_EASING * dt))
+
       camera.position.x = posX
-      camera.position.z = CAM_Z + Math.abs(yaw / YAW_MAX) * PULLBACK_Z
+      camera.position.z = CAM_Z + zoomCurrent + Math.abs(yaw / YAW_MAX) * PULLBACK_Z
       camera.rotation.y = yaw
 
       renderer.render(scene, camera)
