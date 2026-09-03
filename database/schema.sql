@@ -93,8 +93,8 @@ CREATE TABLE embeddings (
     claim_id        UUID REFERENCES claims(id) ON DELETE CASCADE,
     idioma          TEXT NOT NULL DEFAULT 'es',
     texto_origen    TEXT NOT NULL,
-    embedding       vector(768),
-    modelo          TEXT NOT NULL DEFAULT 'text-embedding-004',
+    embedding       vector(1024),
+    modelo          TEXT NOT NULL DEFAULT 'voyage-4',
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     CHECK (noticia_id IS NOT NULL OR claim_id IS NOT NULL)
 );
@@ -116,6 +116,26 @@ CREATE TABLE contradicciones (
     created_at          TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (claim_a_id, claim_b_id),
     CHECK (claim_a_id < claim_b_id)                          -- canonicaliza el par para evitar (a,b)/(b,a)
+);
+
+-- ============================================================
+-- 6b. PARES_EVALUADOS — memoria del juez automático (todo veredicto,
+--     no solo las contradicciones). Evita re-gastar en LLM sobre pares
+--     ya vistos en corridas anteriores. Distinta de eval_pares, que es
+--     el set etiquetado a mano para medir precisión del detector.
+-- ============================================================
+CREATE TABLE pares_evaluados (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    claim_a_id          UUID NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    claim_b_id          UUID NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    label               TEXT NOT NULL CHECK (label IN ('contradiccion','coincidencia','no_relacionado','ambiguo')),
+    intensidad          REAL DEFAULT 0 CHECK (intensidad BETWEEN 0 AND 1),  -- solo con sentido si label='contradiccion'
+    similitud_coseno    REAL,                                -- score ANN que originó el candidato
+    juez                TEXT NOT NULL,
+    metadata            JSONB DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (claim_a_id, claim_b_id),
+    CHECK (claim_a_id < claim_b_id)
 );
 
 -- ============================================================

@@ -11,5 +11,14 @@ export default defineConfig(({ command }) => ({
   server: {
     port: 3000,
     host: true,
+    // Dev: /api/* va a uvicorn local (mismo patrón que en producción, donde
+    // Traefik enruta /api/* al contenedor `api` bajo el mismo origen — así
+    // no hace falta CORS ni un VITE_API_BASE distinto entre dev y prod).
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
   },
 }))

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { generateSampleNews, type NewsItem } from '../data/sampleNews'
+import { generateSampleNews, type NewsItem as MockNewsItem } from '../data/sampleNews'
+import { fetchNoticias, type NewsItem } from '../data/newsApi'
 import './Wall.css'
 
 const ROWS = 3
@@ -47,7 +48,7 @@ function drawCard(item: NewsItem): HTMLCanvasElement {
   const ctx = c.getContext('2d')!
   ctx.scale(TEX_SCALE, TEX_SCALE)
 
-  const isContra = !!item.contradiction
+  const isContra = item.contradicciones.length > 0
 
   ctx.fillStyle = '#12151c'
   ctx.fillRect(0, 0, TILE_W, TILE_H)
@@ -114,6 +115,32 @@ function wrapText(
   if (lines < maxLines && line) ctx.fillText(line, x, y + lines * lineH)
 }
 
+// El mock nunca tuvo el id real de la "otra" noticia (solo el nombre de
+// una fuente) — al usarlo como fallback, la contradicción se muestra
+// (franja + pop-out) pero sin pareja navegable, igual que siempre.
+function mockToNewsItem(m: MockNewsItem): NewsItem {
+  return {
+    id: m.id,
+    source: m.source,
+    sourceColor: m.sourceColor,
+    headline: m.headline,
+    summary: m.summary,
+    publishedAt: m.publishedAt,
+    contradicciones: m.contradiction
+      ? [
+          {
+            id: `mock-${m.id}`,
+            noticiaContrariaId: '',
+            fuenteContraria: m.contradiction.counterSource,
+            tema: 'general',
+            intensidad: 0.7,
+            razonamiento: m.contradiction.note,
+          },
+        ]
+      : [],
+  }
+}
+
 export default function WallGL() {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -121,218 +148,243 @@ export default function WallGL() {
     const host = containerRef.current
     if (!host) return
 
-    const scene = new THREE.Scene()
-    scene.fog = new THREE.Fog(0x080a0f, 1800, 4200)
+    let disposed = false
+    let cleanup: (() => void) | null = null
 
-    const camera = new THREE.PerspectiveCamera(
-      FOV,
-      host.clientWidth / host.clientHeight,
-      1,
-      10000,
-    )
-    camera.position.set(0, 0, CAM_Z)
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(host.clientWidth, host.clientHeight)
-    host.appendChild(renderer.domElement)
-
-    const items = generateSampleNews(ROWS * COLS)
-    const wall = new THREE.Group()
-    scene.add(wall)
-
-    const geo = new THREE.PlaneGeometry(TILE_W, TILE_H)
-    const disposables: Array<{ dispose: () => void }> = [geo]
-
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const item = items[row * COLS + col]
-        const tex = new THREE.CanvasTexture(drawCard(item))
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
-        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true })
-        disposables.push(tex, mat)
-
-        const mesh = new THREE.Mesh(geo, mat)
-        mesh.position.set(
-          col * STEP_X - WALL_W / 2,
-          (ROWS / 2 - row - 0.5) * STEP_Y,
-          item.contradiction ? POP_OUT_Z : 0,
-        )
-        wall.add(mesh)
-
-        // Reflejo espejado bajo la fila inferior.
-        if (row === ROWS - 1) {
-          const rmat = new THREE.MeshBasicMaterial({
-            map: tex,
-            transparent: true,
-            opacity: 0.16,
-            depthWrite: false,
-          })
-          disposables.push(rmat)
-          const refl = new THREE.Mesh(geo, rmat)
-          refl.position.set(
-            mesh.position.x,
-            mesh.position.y - TILE_H - 8,
-            mesh.position.z,
-          )
-          refl.scale.y = -1
-          wall.add(refl)
-        }
+    ;(async () => {
+      let items: NewsItem[]
+      try {
+        items = await fetchNoticias()
+        if (items.length === 0) throw new Error('la API devolvió 0 noticias')
+      } catch (err) {
+        console.warn('No se pudo cargar /api/noticias, usando datos de ejemplo:', err)
+        items = generateSampleNews(ROWS * COLS).map(mockToNewsItem)
       }
-    }
+      if (disposed) return
 
-    // ---- Física: posición + velocidad, fricción exponencial. Sin muelle.
-    let posX = 0 // posición "objetivo": 1:1 con el cursor durante el drag
-    let renderX = 0 // posición realmente pintada: persigue a posX, filtra jitter
-    let velX = 0
-    let yaw = 0
-    let zoomTarget = 0
-    let zoomCurrent = 0
-    const maxX = WALL_W / 2 - 200
-    const minX = -maxX
-    const clamp = (v: number) => Math.max(minX, Math.min(maxX, v))
+      // eslint-disable-next-line no-console
+      console.info('noticias cargadas:', items.length)
 
-    let dragging = false
-    let lastX = 0
-    const samples: Array<{ t: number; x: number }> = []
-    const pushSample = (t: number, x: number) => {
-      samples.push({ t, x })
-      while (samples.length && samples[0].t < t - 80) samples.shift()
-    }
+      const scene = new THREE.Scene()
+      scene.fog = new THREE.Fog(0x080a0f, 1800, 4200)
 
-    // Escala mundo↔pantalla: cuánto se mueve el mundo por píxel de arrastre,
-    // para que el muro siga al cursor 1:1 en el plano z=0.
-    const worldPerPixel = () => {
-      // Usa la distancia de cámara EFECTIVA (con zoom aplicado) para que el
-      // arrastre siga siendo 1:1 con el cursor a cualquier nivel de zoom.
-      const vh = 2 * Math.tan((FOV * Math.PI) / 180 / 2) * (CAM_Z + zoomCurrent)
-      return vh / host.clientHeight
-    }
+      const camera = new THREE.PerspectiveCamera(
+        FOV,
+        host.clientWidth / host.clientHeight,
+        1,
+        10000,
+      )
+      camera.position.set(0, 0, CAM_Z)
 
-    const el = renderer.domElement
-    el.style.touchAction = 'none'
-    el.style.cursor = 'grab'
-
-    const onDown = (e: PointerEvent) => {
-      // Solo botón izquierdo (o touch/pen, que reportan button === 0).
-      // El derecho queda libre para su menú contextual normal del navegador.
-      if (e.button !== 0) return
-      dragging = true
-      lastX = e.clientX
-      samples.length = 0
-      pushSample(performance.now(), e.clientX)
-      velX = 0
-      el.setPointerCapture(e.pointerId)
-      el.style.cursor = 'grabbing'
-    }
-    const onMove = (e: PointerEvent) => {
-      if (!dragging) return
-      const dx = (e.clientX - lastX) * worldPerPixel()
-      lastX = e.clientX
-      pushSample(performance.now(), e.clientX)
-      posX = clamp(posX - dx)
-    }
-    const onUp = () => {
-      if (!dragging) return
-      dragging = false
-      el.style.cursor = 'grab'
-      if (samples.length >= 2) {
-        const a = samples[0]
-        const b = samples[samples.length - 1]
-        const dt = (b.t - a.t) / 1000
-        if (dt > 0) velX = (-(b.x - a.x) / dt) * worldPerPixel()
-      }
-    }
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      if (e.ctrlKey) {
-        // Ctrl+rueda → zoom (dolly de cámara en Z). El navegador reporta el
-        // pellizco de trackpad como wheel+ctrlKey, así que esto además da
-        // soporte a pinch-to-zoom gratis.
-        zoomTarget = Math.max(
-          ZOOM_MIN,
-          Math.min(ZOOM_MAX, zoomTarget + e.deltaY * ZOOM_SPEED),
-        )
-        return
-      }
-      // Rueda normal (vertical u horizontal) → paneo, exactamente como el
-      // comportamiento original: es el que corre sobre el motor de física
-      // (velocidad + fricción, integrado cada frame) y por eso siempre se
-      // sintió más suave que el arrastre, que sigue 1:1 al puntero.
-      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-      velX += d * 12
-    }
-
-    el.addEventListener('pointerdown', onDown)
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    el.addEventListener('wheel', onWheel, { passive: false })
-
-    const onResize = () => {
-      camera.aspect = host.clientWidth / host.clientHeight
-      camera.updateProjectionMatrix()
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
       renderer.setSize(host.clientWidth, host.clientHeight)
-    }
-    window.addEventListener('resize', onResize)
+      host.appendChild(renderer.domElement)
 
-    let raf = 0
-    let prev = performance.now()
-    const tick = () => {
-      raf = requestAnimationFrame(tick)
-      const now = performance.now()
-      const dt = Math.min(0.05, (now - prev) / 1000)
-      prev = now
+      const wall = new THREE.Group()
+      scene.add(wall)
 
-      if (!dragging) {
-        posX += velX * dt
-        velX *= Math.exp(-FRICTION * dt)
-        if (Math.abs(velX) < 0.5) velX = 0
-        if (posX <= minX || posX >= maxX) {
-          posX = clamp(posX)
-          velX = 0
+      const geo = new THREE.PlaneGeometry(TILE_W, TILE_H)
+      const disposables: Array<{ dispose: () => void }> = [geo]
+
+      // Ciclar si hay menos noticias reales que celdas en el grid (108) — el
+      // layout/física no cambia, solo se repiten tiles hasta que el pipeline
+      // real acumule suficientes noticias.
+      for (let row = 0; row < ROWS; row++) {
+        for (let col = 0; col < COLS; col++) {
+          const item = items[(row * COLS + col) % items.length]
+          const tex = new THREE.CanvasTexture(drawCard(item))
+          tex.colorSpace = THREE.SRGBColorSpace
+          tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
+          const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+          disposables.push(tex, mat)
+
+          const mesh = new THREE.Mesh(geo, mat)
+          mesh.position.set(
+            col * STEP_X - WALL_W / 2,
+            (ROWS / 2 - row - 0.5) * STEP_Y,
+            item.contradicciones.length > 0 ? POP_OUT_Z : 0,
+          )
+          wall.add(mesh)
+
+          // Reflejo espejado bajo la fila inferior.
+          if (row === ROWS - 1) {
+            const rmat = new THREE.MeshBasicMaterial({
+              map: tex,
+              transparent: true,
+              opacity: 0.16,
+              depthWrite: false,
+            })
+            disposables.push(rmat)
+            const refl = new THREE.Mesh(geo, rmat)
+            refl.position.set(
+              mesh.position.x,
+              mesh.position.y - TILE_H - 8,
+              mesh.position.z,
+            )
+            refl.scale.y = -1
+            wall.add(refl)
+          }
         }
       }
 
-      // Yaw: la cámara gira hacia donde se mueve, como Cooliris. Durante el
-      // drag se deriva de las muestras del puntero (dividiendo por el tiempo
-      // REAL que abarcan, no por una constante — el ratón no llega a ritmo
-      // fijo, y dividir siempre por 80ms daba una velocidad errática y
-      // hacía vibrar el yaw y el retroceso en Z). Tras soltar, se usa velX,
-      // que ya integra de forma continua en el propio tick.
-      let effVel = velX
-      if (dragging && samples.length >= 2) {
-        const first = samples[0]
-        const last = samples[samples.length - 1]
-        const dtSample = (last.t - first.t) / 1000
-        if (dtSample > 0.001) {
-          effVel = (-(last.x - first.x) / dtSample) * worldPerPixel()
+      // ---- Física: posición + velocidad, fricción exponencial. Sin muelle.
+      let posX = 0 // posición "objetivo": 1:1 con el cursor durante el drag
+      let renderX = 0 // posición realmente pintada: persigue a posX, filtra jitter
+      let velX = 0
+      let yaw = 0
+      let zoomTarget = 0
+      let zoomCurrent = 0
+      const maxX = WALL_W / 2 - 200
+      const minX = -maxX
+      const clamp = (v: number) => Math.max(minX, Math.min(maxX, v))
+
+      let dragging = false
+      let lastX = 0
+      const samples: Array<{ t: number; x: number }> = []
+      const pushSample = (t: number, x: number) => {
+        samples.push({ t, x })
+        while (samples.length && samples[0].t < t - 80) samples.shift()
+      }
+
+      // Escala mundo↔pantalla: cuánto se mueve el mundo por píxel de arrastre,
+      // para que el muro siga al cursor 1:1 en el plano z=0.
+      const worldPerPixel = () => {
+        // Usa la distancia de cámara EFECTIVA (con zoom aplicado) para que el
+        // arrastre siga siendo 1:1 con el cursor a cualquier nivel de zoom.
+        const vh = 2 * Math.tan((FOV * Math.PI) / 180 / 2) * (CAM_Z + zoomCurrent)
+        return vh / host.clientHeight
+      }
+
+      const el = renderer.domElement
+      el.style.touchAction = 'none'
+      el.style.cursor = 'grab'
+
+      const onDown = (e: PointerEvent) => {
+        // Solo botón izquierdo (o touch/pen, que reportan button === 0).
+        // El derecho queda libre para su menú contextual normal del navegador.
+        if (e.button !== 0) return
+        dragging = true
+        lastX = e.clientX
+        samples.length = 0
+        pushSample(performance.now(), e.clientX)
+        velX = 0
+        el.setPointerCapture(e.pointerId)
+        el.style.cursor = 'grabbing'
+      }
+      const onMove = (e: PointerEvent) => {
+        if (!dragging) return
+        const dx = (e.clientX - lastX) * worldPerPixel()
+        lastX = e.clientX
+        pushSample(performance.now(), e.clientX)
+        posX = clamp(posX - dx)
+      }
+      const onUp = () => {
+        if (!dragging) return
+        dragging = false
+        el.style.cursor = 'grab'
+        if (samples.length >= 2) {
+          const a = samples[0]
+          const b = samples[samples.length - 1]
+          const dt = (b.t - a.t) / 1000
+          if (dt > 0) velX = (-(b.x - a.x) / dt) * worldPerPixel()
         }
       }
-      const yawT = Math.max(-1, Math.min(1, effVel / YAW_VELOCITY_SATURATION))
-      yaw += (-yawT * YAW_MAX - yaw) * (1 - Math.exp(-YAW_EASING * dt))
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault()
+        if (e.ctrlKey) {
+          // Ctrl+rueda → zoom (dolly de cámara en Z). El navegador reporta el
+          // pellizco de trackpad como wheel+ctrlKey, así que esto además da
+          // soporte a pinch-to-zoom gratis.
+          zoomTarget = Math.max(
+            ZOOM_MIN,
+            Math.min(ZOOM_MAX, zoomTarget + e.deltaY * ZOOM_SPEED),
+          )
+          return
+        }
+        // Rueda normal (vertical u horizontal) → paneo, exactamente como el
+        // comportamiento original: es el que corre sobre el motor de física
+        // (velocidad + fricción, integrado cada frame) y por eso siempre se
+        // sintió más suave que el arrastre, que sigue 1:1 al puntero.
+        const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+        velX += d * 12
+      }
 
-      zoomCurrent += (zoomTarget - zoomCurrent) * (1 - Math.exp(-ZOOM_EASING * dt))
-      renderX += (posX - renderX) * (1 - Math.exp(-RENDER_SMOOTH * dt))
+      el.addEventListener('pointerdown', onDown)
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+      el.addEventListener('wheel', onWheel, { passive: false })
 
-      camera.position.x = renderX
-      camera.position.z = CAM_Z + zoomCurrent + Math.abs(yaw / YAW_MAX) * PULLBACK_Z
-      camera.rotation.y = yaw
+      const onResize = () => {
+        camera.aspect = host.clientWidth / host.clientHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(host.clientWidth, host.clientHeight)
+      }
+      window.addEventListener('resize', onResize)
 
-      renderer.render(scene, camera)
-    }
-    tick()
+      let raf = 0
+      let prev = performance.now()
+      const tick = () => {
+        raf = requestAnimationFrame(tick)
+        const now = performance.now()
+        const dt = Math.min(0.05, (now - prev) / 1000)
+        prev = now
+
+        if (!dragging) {
+          posX += velX * dt
+          velX *= Math.exp(-FRICTION * dt)
+          if (Math.abs(velX) < 0.5) velX = 0
+          if (posX <= minX || posX >= maxX) {
+            posX = clamp(posX)
+            velX = 0
+          }
+        }
+
+        // Yaw: la cámara gira hacia donde se mueve, como Cooliris. Durante el
+        // drag se deriva de las muestras del puntero (dividiendo por el tiempo
+        // REAL que abarcan, no por una constante — el ratón no llega a ritmo
+        // fijo, y dividir siempre por 80ms daba una velocidad errática y
+        // hacía vibrar el yaw y el retroceso en Z). Tras soltar, se usa velX,
+        // que ya integra de forma continua en el propio tick.
+        let effVel = velX
+        if (dragging && samples.length >= 2) {
+          const first = samples[0]
+          const last = samples[samples.length - 1]
+          const dtSample = (last.t - first.t) / 1000
+          if (dtSample > 0.001) {
+            effVel = (-(last.x - first.x) / dtSample) * worldPerPixel()
+          }
+        }
+        const yawT = Math.max(-1, Math.min(1, effVel / YAW_VELOCITY_SATURATION))
+        yaw += (-yawT * YAW_MAX - yaw) * (1 - Math.exp(-YAW_EASING * dt))
+
+        zoomCurrent += (zoomTarget - zoomCurrent) * (1 - Math.exp(-ZOOM_EASING * dt))
+        renderX += (posX - renderX) * (1 - Math.exp(-RENDER_SMOOTH * dt))
+
+        camera.position.x = renderX
+        camera.position.z = CAM_Z + zoomCurrent + Math.abs(yaw / YAW_MAX) * PULLBACK_Z
+        camera.rotation.y = yaw
+
+        renderer.render(scene, camera)
+      }
+      tick()
+
+      cleanup = () => {
+        cancelAnimationFrame(raf)
+        el.removeEventListener('pointerdown', onDown)
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        el.removeEventListener('wheel', onWheel)
+        window.removeEventListener('resize', onResize)
+        disposables.forEach((d) => d.dispose())
+        renderer.dispose()
+        if (el.parentElement === host) host.removeChild(el)
+      }
+    })()
 
     return () => {
-      cancelAnimationFrame(raf)
-      el.removeEventListener('pointerdown', onDown)
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      el.removeEventListener('wheel', onWheel)
-      window.removeEventListener('resize', onResize)
-      disposables.forEach((d) => d.dispose())
-      renderer.dispose()
-      if (el.parentElement === host) host.removeChild(el)
+      disposed = true
+      cleanup?.()
     }
   }, [])
 
