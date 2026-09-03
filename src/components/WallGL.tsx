@@ -207,14 +207,19 @@ export default function WallGL() {
 
     const el = renderer.domElement
     el.style.touchAction = 'none'
+    el.style.cursor = 'grab'
 
     const onDown = (e: PointerEvent) => {
+      // Solo botón izquierdo (o touch/pen, que reportan button === 0).
+      // El derecho queda libre para su menú contextual normal del navegador.
+      if (e.button !== 0) return
       dragging = true
       lastX = e.clientX
       samples.length = 0
       pushSample(performance.now(), e.clientX)
       velX = 0
       el.setPointerCapture(e.pointerId)
+      el.style.cursor = 'grabbing'
     }
     const onMove = (e: PointerEvent) => {
       if (!dragging) return
@@ -226,6 +231,7 @@ export default function WallGL() {
     const onUp = () => {
       if (!dragging) return
       dragging = false
+      el.style.cursor = 'grab'
       if (samples.length >= 2) {
         const a = samples[0]
         const b = samples[samples.length - 1]
