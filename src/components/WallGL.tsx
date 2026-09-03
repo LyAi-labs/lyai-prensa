@@ -246,19 +246,22 @@ export default function WallGL() {
     }
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      // Swipe horizontal de trackpad, o Shift+rueda (convención estándar
-      // para paneo en ratones sin rueda horizontal) → paneo lateral.
-      const isPan = Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey
-      if (isPan) {
-        const d = e.shiftKey && Math.abs(e.deltaX) <= Math.abs(e.deltaY) ? e.deltaY : e.deltaX
-        velX += d * 12
-      } else {
-        // Rueda vertical normal → zoom (dolly de cámara en Z).
+      if (e.ctrlKey) {
+        // Ctrl+rueda → zoom (dolly de cámara en Z). El navegador reporta el
+        // pellizco de trackpad como wheel+ctrlKey, así que esto además da
+        // soporte a pinch-to-zoom gratis.
         zoomTarget = Math.max(
           ZOOM_MIN,
           Math.min(ZOOM_MAX, zoomTarget + e.deltaY * ZOOM_SPEED),
         )
+        return
       }
+      // Rueda normal (vertical u horizontal) → paneo, exactamente como el
+      // comportamiento original: es el que corre sobre el motor de física
+      // (velocidad + fricción, integrado cada frame) y por eso siempre se
+      // sintió más suave que el arrastre, que sigue 1:1 al puntero.
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+      velX += d * 12
     }
 
     el.addEventListener('pointerdown', onDown)
