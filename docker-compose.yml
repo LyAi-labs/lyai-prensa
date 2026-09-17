@@ -11,12 +11,9 @@
 # websecure con tls.certresolver. Traefik atiende el challenge ACME por su
 # cuenta en el entrypoint web, no hace falta un router HTTP propio.
 #
-# PENDIENTE DE CONFIRMAR EN EL SERVIDOR (no verificable desde el sandbox de
-# desarrollo): a qué red Docker está conectado el contenedor `lyai_postgres`.
-# El servicio `api` de abajo necesita esa red para poder hablar con la BD.
-# Averiguarlo igual que se hizo con `traefik_traefik`:
-#   docker inspect lyai_postgres --format '{{json .NetworkSettings.Networks}}'
-# y sustituir `lyai_postgres_net` (placeholder) por el nombre real.
+# Confirmado en el servidor 2026-09-04: `lyai_postgres` está en la red
+# `lyai-ski_ski_internal` (docker inspect lyai_postgres --format
+# '{{json .NetworkSettings.Networks}}').
 #
 # Uso:
 #   git pull
@@ -67,4 +64,4 @@ networks:
     name: traefik_traefik
   lyai_postgres_net:
     external: true
-    name: lyai_postgres_net # PLACEHOLDER — confirmar nombre real en el servidor (ver arriba)
+    name: lyai-ski_ski_internal
