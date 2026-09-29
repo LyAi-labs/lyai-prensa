@@ -30,7 +30,7 @@ def connect() -> Connection:
     """Abre conexión a lyai_db con search_path = prensa, public."""
     conn = psycopg2.connect(_database_url())
     with conn.cursor() as cur:
-        cur.execute("SET search_path TO prensa, public;")
+        cur.execute("SET search_path TO prensa, lyai, public;")
     conn.commit()
     return conn
 

@@ -5,7 +5,7 @@
 
 DROP SCHEMA IF EXISTS prensa CASCADE;
 CREATE SCHEMA prensa;
-SET search_path TO prensa, public;
+SET search_path TO prensa, lyai, public;
 
 -- Extensiones (idempotentes a nivel de DB)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
