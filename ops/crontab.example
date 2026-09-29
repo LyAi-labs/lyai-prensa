@@ -1,0 +1,28 @@
+# /etc/cron.d/lyai-postgres-backups
+#
+# Instalación:
+#   sudo install -m 0644 ops/crontab.example /etc/cron.d/lyai-postgres-backups
+#   sudo systemctl reload cron
+#
+# Variables del script en /etc/lyai/backup.env (modo 0600 owner root).
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+LYAI_BACKUP_ENV=/etc/lyai/backup.env
+
+# ── Backups por esquema cada 6 h (escalonados 5 min) ─────────────────
+0  0,6,12,18 * * * root /opt/lyai/ops/postgres-backup.sh schema lyai
+5  0,6,12,18 * * * root /opt/lyai/ops/postgres-backup.sh schema puertas
+10 0,6,12,18 * * * root /opt/lyai/ops/postgres-backup.sh schema autonoma
+15 0,6,12,18 * * * root /opt/lyai/ops/postgres-backup.sh schema prensa
+
+# ── Dump completo diario (03:00 UTC) ─────────────────────────────────
+0 3 * * * root /opt/lyai/ops/postgres-backup.sh full
+
+# ── Limpieza por retención (04:30 UTC) ───────────────────────────────
+30 4 * * * root find /var/backups/lyai_db -maxdepth 1 -name '*.dump'        -mtime +7  -delete
+35 4 * * * root find /var/backups/lyai_db -maxdepth 1 -name 'diario-*.sql.gz' -mtime +30 -delete
+# (Las copias semanales y mensuales viven en otro directorio o tag, fuera de este cron simple.)
+
+# ── Restore-test semanal (domingo 05:00 UTC) ─────────────────────────
+0 5 * * 0 root /opt/lyai/ops/postgres-verify-backup.sh
