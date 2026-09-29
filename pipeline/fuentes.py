@@ -624,7 +624,7 @@ FUENTES: list[Fuente] = [
         "sesgo": "centro",
     },
     {
-        "slug": "diario-de-mallorca-prensaiberica",
+        "slug": "la-opinion-de-murcia",
         "nombre": "La Opinión de Murcia",
         "rss_url": "https://www.laopiniondemurcia.es/rss/2.0/portada/",
         "web_url": "https://www.laopiniondemurcia.es",
