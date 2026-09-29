@@ -16,7 +16,7 @@
 --   psql "$DATABASE_URL" -f database/migrations/001_voyage_embeddings_pares_evaluados.sql
 -- ============================================================
 
-SET search_path TO prensa, public;
+SET search_path TO prensa, lyai, public;
 
 -- Guard: si ya hay embeddings con la dimensión vieja, cambiar el tipo de
 -- columna los truncaría/rompería en silencio. Abortamos ruidosamente en

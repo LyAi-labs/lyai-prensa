@@ -56,10 +56,11 @@ def health(conn=Depends(get_db)) -> HealthOut:
 @app.get("/api/noticias", response_model=list[NoticiaOut])
 def listar_noticias(
     limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     conn=Depends(get_db),
 ) -> list[NoticiaOut]:
     with conn.cursor() as cur:
-        cur.execute(SELECT_NOTICIAS_SQL, {"limit": limit})
+        cur.execute(SELECT_NOTICIAS_SQL, {"limit": limit, "offset": offset})
         noticias = _rows_as_dicts(cur)
 
     if not noticias:

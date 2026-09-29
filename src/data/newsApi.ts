@@ -85,8 +85,8 @@ function mapNoticia(n: ApiNoticia): NewsItem {
   }
 }
 
-export async function fetchNoticias(limit = 200): Promise<NewsItem[]> {
-  const res = await fetch(`${API_BASE}/noticias?limit=${limit}`)
+export async function fetchNoticias(limit = 108, offset = 0): Promise<NewsItem[]> {
+  const res = await fetch(`${API_BASE}/noticias?limit=${limit}&offset=${offset}`)
   if (!res.ok) throw new Error(`API /noticias respondió ${res.status}`)
   const data: ApiNoticia[] = await res.json()
   return data.map(mapNoticia)

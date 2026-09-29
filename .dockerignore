@@ -7,9 +7,4 @@ dist
 .env.local
 .env.*.local
 .DS_Store
-pipeline
-database
-docs
-ops
-requirements.txt
-README.md
+.antigravitycli

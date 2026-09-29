@@ -35,7 +35,7 @@ case "$mode" in
   full)
     name="diario-$(date -u +%Y-%m-%d)"
     dest="$BACKUP_DIR/$name.sql.gz"
-    docker exec "$CONTAINER" pg_dumpall -U "$PG_USER" \
+    docker exec ${PG_PASSWORD:+-e PGPASSWORD="$PG_PASSWORD"} "$CONTAINER" pg_dumpall -U "$PG_USER" \
       | gzip -9 > "$dest"
     ;;
   schema)
@@ -46,7 +46,7 @@ case "$mode" in
     fi
     name="${schema}-$(date -u +%Y-%m-%dT%H)"
     dest="$BACKUP_DIR/$name.dump"
-    docker exec "$CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" \
+    docker exec ${PG_PASSWORD:+-e PGPASSWORD="$PG_PASSWORD"} "$CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" \
       --schema="$schema" -Fc > "$dest"
     ;;
   *)

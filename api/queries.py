@@ -17,7 +17,7 @@ SELECT n.id, n.titular, n.descripcion, n.enlace, n.publicada_en,
 FROM prensa.noticias n
 JOIN prensa.fuentes f ON f.id = n.fuente_id
 ORDER BY n.publicada_en DESC
-LIMIT %(limit)s;
+LIMIT %(limit)s OFFSET %(offset)s;
 """
 
 # Trae, para el conjunto de noticias ya paginado, todas las contradicciones
