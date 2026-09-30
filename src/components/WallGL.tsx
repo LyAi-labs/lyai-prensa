@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import * as THREE from 'three'
+import gsap from 'gsap'
 import { generateSampleNews, type NewsItem as MockNewsItem } from '../data/sampleNews'
 import { fetchDiasContradiccion, fetchNoticias, type Contradiccion, type NewsItem } from '../data/newsApi'
 import './Wall.css'
@@ -31,6 +32,12 @@ const YAW_MAX = 0.3
 const YAW_VELOCITY_SATURATION = 1800
 const YAW_EASING = 14
 const PULLBACK_Z = 140
+
+// Transición Hoy/calendario (GSAP) — dolly-out/in aditivo sobre la física
+// normal, no la sustituye. Ver dev-xplain 2026-09-30-0159-prensa-hoy-transicion-gsap.
+const JUMP_DOLLY_Z = 900
+const JUMP_EXIT_DURATION = 0.28
+const JUMP_ENTER_DURATION = 0.55
 
 // 2 se quedaba corto al hacer zoom (Ctrl+rueda acerca la cámara hasta
 // CAM_Z+ZOOM_MIN = 550, ~2.7x más cerca que la distancia por defecto) — la
@@ -222,7 +229,15 @@ function mockToNewsItem(m: MockNewsItem): NewsItem {
 export default function WallGL() {
   const containerRef = useRef<HTMLDivElement>(null)
   const debugRef = useRef<HTMLDivElement>(null)
+  const flashRef = useRef<HTMLDivElement>(null)
   const itemsRef = useRef<NewsItem[]>([])
+  // Puente hacia la escena Three.js viva, para que goToday()/goToDate()
+  // (fuera del useEffect) puedan animar la cámara de salida antes de que
+  // React re-monte la escena. null si todavía no ha montado ninguna.
+  const sceneApiRef = useRef<{ animateExit: (onDone: () => void) => void } | null>(null)
+  // true si el próximo montaje de la escena viene de un salto Hoy/calendario
+  // (con animación de entrada) en vez de paginación normal (sin animación).
+  const justJumpedRef = useRef(false)
   const [page, setPage] = useState(0)
   const [totalCount] = useState(3330)
   const [activeContra, setActiveContra] = useState<{ item: NewsItem; contradiccion: Contradiccion } | null>(null)
@@ -232,17 +247,27 @@ export default function WallGL() {
   const [dateAnchor, setDateAnchor] = useState<string | null>(null)
   const [showCalendar, setShowCalendar] = useState(false)
 
-  const goToday = () => {
-    setDateAnchor(null)
-    setPage(0)
+  // Salto de fecha (Hoy o un día del calendario): dolly-out + blur de la
+  // escena viva, flash de marca tapando el remount real de Three.js, y la
+  // escena nueva monta ya en modo "recién llegado" para hacer dolly-in
+  // (ver useEffect). No toca la física del muro (pan/zoom con inercia) —
+  // ver dev-xplain 2026-09-30-0159-prensa-hoy-transicion-gsap.
+  const jumpTo = (apply: () => void) => {
     setShowCalendar(false)
+    const commit = () => {
+      justJumpedRef.current = true
+      if (flashRef.current) gsap.to(flashRef.current, { opacity: 1, duration: 0.15, ease: 'power1.in' })
+      apply()
+    }
+    if (sceneApiRef.current) {
+      sceneApiRef.current.animateExit(commit)
+    } else {
+      commit()
+    }
   }
 
-  const goToDate = (isoDate: string) => {
-    setDateAnchor(isoDate)
-    setPage(0)
-    setShowCalendar(false)
-  }
+  const goToday = () => jumpTo(() => { setDateAnchor(null); setPage(0) })
+  const goToDate = (isoDate: string) => jumpTo(() => { setDateAnchor(isoDate); setPage(0) })
 
   useEffect(() => {
     const host = containerRef.current
@@ -268,6 +293,9 @@ export default function WallGL() {
       if (disposed) return
       itemsRef.current = items
 
+      const animateIn = justJumpedRef.current
+      justJumpedRef.current = false
+
       const scene = new THREE.Scene()
       // near=1800 quedaba a solo 300 unidades de CAM_Z (1500) — con
       // ZOOM_MAX=1300 (cámara hasta 2800), cualquier zoom-out moderado ya
@@ -290,6 +318,44 @@ export default function WallGL() {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
       renderer.setSize(host.clientWidth, host.clientHeight)
       host.appendChild(renderer.domElement)
+
+      // Offset aditivo de la transición Hoy/calendario — GSAP anima este
+      // objeto, tick() lo suma a camera.position.z. Así no toca zoomCurrent
+      // ni su suavizado (ZOOM_EASING), que siguen siendo solo del usuario.
+      const jumpDolly = { z: animateIn ? JUMP_DOLLY_Z : 0 }
+
+      // Entrada de la transición Hoy/calendario: arranca desenfocada/tenue y
+      // hace dolly-in (jumpDolly.z) + fade/deblur hasta el estado normal. Si
+      // no viene de un salto (paginación normal), no se toca nada de esto.
+      if (animateIn) {
+        renderer.domElement.style.opacity = '0'
+        renderer.domElement.style.filter = 'blur(10px)'
+        gsap.to(renderer.domElement, {
+          opacity: 1,
+          filter: 'blur(0px)',
+          duration: JUMP_ENTER_DURATION,
+          ease: 'power2.out',
+        })
+        gsap.to(jumpDolly, { z: 0, duration: JUMP_ENTER_DURATION, ease: 'power3.out' })
+        if (flashRef.current) {
+          gsap.to(flashRef.current, { opacity: 0, duration: 0.4, ease: 'power2.out', delay: 0.05 })
+        }
+      }
+
+      sceneApiRef.current = {
+        animateExit(onDone) {
+          gsap.killTweensOf(jumpDolly)
+          gsap.killTweensOf(renderer.domElement)
+          gsap.to(jumpDolly, { z: JUMP_DOLLY_Z, duration: JUMP_EXIT_DURATION, ease: 'power1.in' })
+          gsap.to(renderer.domElement, {
+            opacity: 0.3,
+            filter: 'blur(6px)',
+            duration: JUMP_EXIT_DURATION,
+            ease: 'power1.in',
+            onComplete: onDone,
+          })
+        },
+      }
 
       const wall = new THREE.Group()
       scene.add(wall)
@@ -548,7 +614,7 @@ export default function WallGL() {
         renderX += (posX - renderX) * (1 - Math.exp(-RENDER_SMOOTH * dt))
 
         camera.position.x = renderX
-        camera.position.z = CAM_Z + zoomCurrent + Math.abs(yaw / YAW_MAX) * PULLBACK_Z
+        camera.position.z = CAM_Z + zoomCurrent + Math.abs(yaw / YAW_MAX) * PULLBACK_Z + jumpDolly.z
         camera.rotation.y = yaw
 
         renderer.render(scene, camera)
@@ -572,6 +638,9 @@ export default function WallGL() {
         window.removeEventListener('pointerup', onUp)
         el.removeEventListener('wheel', onWheel)
         window.removeEventListener('resize', onResize)
+        gsap.killTweensOf(jumpDolly)
+        gsap.killTweensOf(renderer.domElement)
+        sceneApiRef.current = null
         disposables.forEach((d) => d.dispose())
         renderer.dispose()
         if (el.parentElement === host) host.removeChild(el)
@@ -666,6 +735,11 @@ export default function WallGL() {
         }}
       />
 
+      {/* Flash de marca que tapa el corte real del remount de Three.js al
+          saltar por Hoy/calendario — GSAP lo anima vía flashRef, sin
+          re-render de React (mismo patrón que el HUD de depuración). */}
+      <div ref={flashRef} className="wall-jump-flash" />
+
       {activeContra && (
         <ContradiccionPanel
           data={activeContra}
@@ -696,7 +770,13 @@ function ContradiccionPanel({
 
   return (
     <div className="contra-backdrop" onClick={onClose}>
-      <div className="contra-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="contra-panel spotlight-card"
+        style={{ '--spotlight-rgb': hexToRgb(color) } as CSSProperties}
+        onMouseMove={onSpotlightMove}
+        onMouseLeave={onSpotlightLeave}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="contra-panel-head">
           <span className="contra-panel-title" style={{ color }}>
             ⚠ Contradicción detectada · {c.tema}
@@ -766,6 +846,27 @@ function dominio(url: string): string {
   }
 }
 
+// SpotlightCard (ver Componentes/Spotlight Card) — glow que sigue al cursor
+// vía custom properties CSS (--mx/--my), solo en paneles reales del DOM
+// (nunca en las cards del muro, que son texturas de canvas: ver dev-xplain
+// 2026-09-30-0347-prensa-spotlight-card-paneles).
+function hexToRgb(hex: string): string {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  if (!m) return '99, 102, 241'
+  return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`
+}
+
+function onSpotlightMove(e: MouseEvent<HTMLElement>) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  e.currentTarget.style.setProperty('--mx', `${(((e.clientX - rect.left) / rect.width) * 100).toFixed(2)}%`)
+  e.currentTarget.style.setProperty('--my', `${(((e.clientY - rect.top) / rect.height) * 100).toFixed(2)}%`)
+}
+
+function onSpotlightLeave(e: MouseEvent<HTMLElement>) {
+  e.currentTarget.style.setProperty('--mx', '50%')
+  e.currentTarget.style.setProperty('--my', '50%')
+}
+
 // Panel de detalle al hacer click en una card con foto (Iteración 4, opción
 // A: la card del muro se queda compacta y sin foto — solo se ve aquí). El
 // footer de comentarios/compartir/guardar de la plantilla original se
@@ -773,7 +874,17 @@ function dominio(url: string): string {
 function NoticiaPanel({ item, onClose }: { item: NewsItem; onClose: () => void }) {
   return (
     <div className="contra-backdrop" onClick={onClose}>
-      <div className="noticia-panel" style={{ borderColor: item.sourceColor, boxShadow: `0 0 30px -4px ${item.sourceColor}80, 0 30px 60px -20px rgba(0,0,0,.8)` }} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="noticia-panel spotlight-card"
+        style={{
+          borderColor: item.sourceColor,
+          boxShadow: `0 0 30px -4px ${item.sourceColor}80, 0 30px 60px -20px rgba(0,0,0,.8)`,
+          '--spotlight-rgb': hexToRgb(item.sourceColor),
+        } as CSSProperties}
+        onMouseMove={onSpotlightMove}
+        onMouseLeave={onSpotlightLeave}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="noticia-panel-head">
           <span className="noticia-panel-name" style={{ color: item.sourceColor }}>
             {item.source}

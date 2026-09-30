@@ -663,3 +663,78 @@
 .noticia-panel-foot:hover {
   text-decoration: underline;
 }
+
+/* ── Flash de transición Hoy/calendario ───────────────────────────────── */
+
+.wall-jump-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background: radial-gradient(circle, rgba(0, 229, 255, 0.9), rgba(0, 229, 255, 0) 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── SpotlightCard (Componentes/Spotlight Card) — glow que sigue al cursor,
+   solo en paneles reales del DOM (contra-panel, noticia-panel). Pegado tal
+   cual salvo --spotlight-rgb, que aquí se calcula por JS desde el color del
+   medio en vez de usar las variantes .spc-* fijas. ─────────────────────── */
+
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: radial-gradient(
+    600px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(var(--spotlight-rgb, 99, 102, 241), 0.13) 0%,
+    rgba(var(--spotlight-rgb, 99, 102, 241), 0.04) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+  will-change: background;
+}
+
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+.spotlight-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: radial-gradient(
+      400px circle at var(--mx, 50%) var(--my, 50%),
+      rgba(var(--spotlight-rgb, 99, 102, 241), 0.45),
+      transparent 60%
+    )
+    border-box;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.spotlight-card:hover::after {
+  opacity: 1;
+}
+
+.spotlight-card > * {
+  position: relative;
+  z-index: 1;
+}
