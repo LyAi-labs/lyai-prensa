@@ -142,17 +142,22 @@ jitter). Cualquier cambio futuro de interacción debe preservar esa jerarquía.
 
 Antes el muro pintaba `sampleNews.ts` (mock) con contradicciones sin pareja real. Ya resuelto:
 
-- `pipeline/embed_claims.py` — embeddings de claims vía Voyage AI (`voyage-4`, 1024 dim).
+- `pipeline/embed_claims.py` — embeddings de claims vía **Ollama local** (`bge-m3`, 1024 dim,
+  sin coste). Antes era Voyage AI (de pago) — cambiado 2026-09-29: el proyecto no puede
+  gastar en APIs hasta que genere ingresos (ver `RULES-COSTS.md`). `bge-m3` da 1024 dim por
+  suerte, así que la migración/el esquema no cambiaron de forma.
 - `pipeline/judge_contradictions.py` — candidatos por similitud coseno (sobremuestreo HNSW
-  top-50, filtrado en Python, tope 8) + una llamada a **Claude Sonnet 5** por par claim-fuente
-  contra el criterio de `docs/contradiccion-criterios.md` (se carga literalmente en runtime,
-  no lo dupliques en el prompt a mano). Escribe en `pares_evaluados` (memoria de todo
-  veredicto) y `contradicciones`, recalcula `noticias.intensidad_contradiccion`/`eje_z`.
+  top-50, filtrado en Python, tope 8) + una llamada a **Gemini 2.5-flash** (gratis según
+  `RULES-COSTS.md`, ver `pipeline/gemini.py`) por par claim-fuente contra el criterio de
+  `docs/contradiccion-criterios.md` (se carga literalmente en runtime, no lo dupliques en el
+  prompt a mano). Escribe en `pares_evaluados` (memoria de todo veredicto) y
+  `contradicciones`, recalcula `noticias.intensidad_contradiccion`/`eje_z`.
 - `api/` — FastAPI de solo lectura (`/api/noticias`, `/api/fuentes`, `/api/health`). Cada
   contradicción resuelve al ID real de la otra noticia.
 - `src/data/newsApi.ts` + `WallGL.tsx` — fetch real con fallback a `sampleNews.ts` si falla.
 - `database/migrations/001_voyage_embeddings_pares_evaluados.sql` — migración con guard que
-  aborta si `embeddings` ya tiene filas.
+  aborta si `embeddings` ya tiene filas (el nombre del fichero es histórico — el default de
+  `modelo` ya apunta a `bge-m3`, no a Voyage; ver comentario dentro del propio SQL).
 - Verificado end-to-end en sandbox aislado (Postgres 16 + pgvector, fixture en
   `database/seed_test_data.sql`) **sin gastar en llamadas reales**. Test E2E en
   `e2e/wall.spec.ts`.
@@ -161,25 +166,38 @@ Antes el muro pintaba `sampleNews.ts` (mock) con contradicciones sin pareja real
 
 1. `git status` primero, siempre, antes de tocar la rama.
 2. `git fetch origin && git checkout claude/resume-session-xLdtE && git pull` si hace falta.
-3. Backup antes de tocar la BD: `./ops/postgres-backup.sh schema prensa`.
+3. Backup antes de tocar la BD: `./ops/postgres-backup.sh schema prensa` — **roto ahora
+   mismo**: `mkdir /var/backups/lyai_db` da Permission denied (el directorio es root:root
+   755). O se arregla el permiso/BACKUP_DIR, o se pide a Ignacio, antes de fiarse de este
+   paso.
 4. ~~Confirmar red Docker de `lyai_postgres`~~ — **ya hecho y commiteado** (`9c17be8`,
    2026-09-17): es `lyai-ski_ski_internal`. No lo repitas.
-5. Añadir `VOYAGE_API_KEY` al `.env` (cuenta en voyageai.com) — coste real, confirmar con
-   Claude Code/Ignacio antes si no está ya autorizado.
+5. ~~Añadir `VOYAGE_API_KEY`~~ — **ya no aplica** (2026-09-29): embeddings son locales
+   (Ollama/bge-m3, sin key) y el juez/extractor usan `GOOGLE_GENERATIVE_KEY` (Gemini,
+   gratis, reutilizada de `lyai-ski/backend/.env` — ya está en `.env` de este proyecto).
 6. Aplicar migración: `psql "$DATABASE_URL" -f database/migrations/001_voyage_embeddings_pares_evaluados.sql`.
-7. `docker compose up -d --build`; verificar `docker compose ps`, `docker logs lyai_prensa_api
-   --tail 50`, `curl -sk https://prensa.lyai.es/api/health`.
-8. (Opcional, gasta dinero real — pedir autorización) primera corrida pequeña:
-   `python -m pipeline.ingest && python -m pipeline.extract_claims --limit 20 && python -m
-   pipeline.embed_claims --limit 20 && python -m pipeline.judge_contradictions --limit 20`.
+7. `docker-compose up -d --build` (en este server el binario es `docker-compose`, no el
+   plugin `docker compose` — probado 2026-09-29); verificar `docker-compose ps`,
+   `docker logs lyai_prensa_api --tail 50`, `curl -sk https://prensa.lyai.es/api/health`.
+   ⚠️ El build del frontend puede quedarse en caché de Docker y no recoger cambios de
+   `src/` aunque la imagen se reporte "Built" — si el `Created` del contenedor no cambia
+   tras el build, forzar `docker-compose build --no-cache prensa && docker-compose up -d
+   --force-recreate prensa`.
+8. Primera corrida pequeña — **ya no requiere autorización de coste** (todo gratis desde el
+   2026-09-29): `DATABASE_URL=$(grep '^DATABASE_URL=' .env | cut -d= -f2- | sed
+   's/lyai_postgres/localhost/') python3 -m pipeline.ingest && ... extract_claims --limit 20
+   && ... embed_claims --limit 20 && ... judge_contradictions --limit 20`. Nota el prefijo
+   `DATABASE_URL=...localhost...`: el `.env` trae el hostname Docker (`lyai_postgres`), que
+   solo resuelve dentro de la red del contenedor — para correr el pipeline en el host hay que
+   sustituirlo por `localhost` (Postgres publica `127.0.0.1:5432`), sin tocar el `.env` (el
+   contenedor `api` sí necesita el hostname tal cual).
 9. No hay cron todavía para el pipeline — pendiente de cerrar una vez validado lo anterior.
 
 ### Restricciones activas
 
-- **No usar modelos superiores a Claude Sonnet 5**, ni en código ni en subagentes.
-  `extract_claims.py` sigue en `claude-opus-4-7` por decisión previa ya documentada en el
-  propio código — es una inconsistencia conocida y señalada, **no la corrijas sin que se
-  pida explícitamente**.
+- **No usar modelos superiores a `gemini-2.5-flash`** en `extract_claims.py` /
+  `judge_contradictions.py`, ni en código ni en subagentes — subir a `gemini-2.5-pro` (o
+  volver a un proveedor de pago) requiere autorización explícita de Ignacio, no es gratis.
 - Ser eficiente con el consumo de tokens/llamadas — no re-litigar decisiones ya tomadas y
   documentadas en el código o en `docs/`.
 

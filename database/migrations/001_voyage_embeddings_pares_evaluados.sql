@@ -2,12 +2,16 @@
 -- Migración 001 — lyai_db, schema prensa
 --
 -- Contexto: schema.sql definía `embeddings.embedding vector(768)` con
--- default `modelo='text-embedding-004'` (Google), pero el resto del
--- pipeline es 100% Anthropic. Pasamos a Voyage AI (voyage-4, 1024 dim),
--- su partner de embeddings recomendado, para no meter un tercer
--- proveedor. Se añade además `pares_evaluados`, la memoria del juez
--- automático de contradicciones (todo veredicto, no solo los positivos),
--- para no re-gastar en LLM sobre pares ya evaluados en corridas previas.
+-- default `modelo='text-embedding-004'` (Google). Primero se pasó a
+-- Voyage AI (voyage-4, 1024 dim, de pago) y ahora se vuelve a un
+-- proveedor gratuito porque el proyecto no puede gastar en APIs hasta
+-- que genere ingresos (RULES-COSTS.md): `bge-m3` vía Ollama LOCAL en
+-- este mismo servidor (ver pipeline/embed_claims.py). Por suerte
+-- bge-m3 también da 1024 dim, así que esta migración no cambia — solo
+-- cambia qué valor por defecto lleva la columna `modelo`. Se añade
+-- además `pares_evaluados`, la memoria del juez automático de
+-- contradicciones (todo veredicto, no solo los positivos), para no
+-- re-evaluar con el LLM pares ya vistos en corridas previas.
 --
 -- Diseñada para aplicarse UNA VEZ contra lyai_db real. Ejecutar
 -- ops/postgres-backup.sh schema prensa antes, por si acaso.
@@ -41,7 +45,7 @@ ALTER TABLE prensa.embeddings
     ALTER COLUMN embedding TYPE vector(1024) USING embedding::vector(1024);
 
 ALTER TABLE prensa.embeddings
-    ALTER COLUMN modelo SET DEFAULT 'voyage-4';
+    ALTER COLUMN modelo SET DEFAULT 'bge-m3';
 
 CREATE INDEX idx_embeddings_vector ON prensa.embeddings
     USING hnsw (embedding vector_cosine_ops)

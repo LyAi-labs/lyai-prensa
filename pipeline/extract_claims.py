@@ -1,9 +1,16 @@
 """
-Extracción de claims atómicos por noticia usando Claude Opus 4.7.
+Extracción de claims atómicos por noticia usando Gemini 2.5 Flash.
 
-Por cada noticia en `prensa.noticias` que aún no tenga claims, llama a la API
-de Anthropic con un system prompt cacheado y un schema Pydantic de salida
-estricto, e inserta los claims resultantes en `prensa.claims`.
+Por cada noticia en `prensa.noticias` que aún no tenga claims, llama a la
+API de Gemini (REST, sin SDK — ver pipeline/gemini.py) con un system prompt
+y un schema Pydantic de salida estricto, e inserta los claims resultantes
+en `prensa.claims`.
+
+Antes usaba Claude Opus 4.7 ("sin escatimar" en calidad de extracción) —
+se sustituyó porque el proyecto no puede gastar en APIs hasta que genere
+ingresos (ver RULES-COSTS.md). Gemini 2.5-flash es gratuito dentro de esa
+política; si la calidad de extracción se queda corta, el primer palanca a
+tocar es el prompt, no subir a un modelo de pago sin autorización.
 
 Idempotente: re-ejecutar solo procesa noticias sin claims (LEFT JOIN). Si el
 ingester recoge nuevas noticias, una segunda corrida extrae solo las nuevas.
@@ -18,20 +25,22 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from typing import Any
 
-import anthropic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from pipeline.db import connect
+from pipeline.gemini import GEMINI_MODEL, GeminiError, generate_json
 
 
-# Modelo de extracción. Por instrucción del usuario ("sin escatimar"),
-# usamos Opus 4.7. Si el coste por corrida pesa más que la calidad de
-# extracción (que es upstream del juez), bajar a "claude-sonnet-4-6"
-# es seguro: la unidad sensible al modelo es el juez de contradicciones,
-# no el extractor.
-EXTRACTOR_MODEL = "claude-opus-4-7"
+EXTRACTOR_MODEL = GEMINI_MODEL
+
+# El tier gratuito de Gemini limita a ~20 req/min (verificado 2026-09-29
+# contra un 429 real: "generate_content_free_tier_requests, limit: 20").
+# Sin este respiro, cualquier lote de más de un puñado de noticias empieza
+# a fallar en cadena a partir de la segunda llamada.
+SLEEP_ENTRE_LLAMADAS = 3.5
 
 
 SYSTEM_PROMPT = """Eres un extractor experto de afirmaciones (claims) factuales en noticias de prensa española. Tu trabajo es leer una noticia y extraer **2 a 5 claims atómicos**, idealmente verificables y mutuamente independientes.
@@ -174,26 +183,12 @@ def build_user_message(n: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def extract(client: anthropic.Anthropic, n: dict[str, Any]):
-    response = client.messages.parse(
-        model=EXTRACTOR_MODEL,
-        max_tokens=8000,
-        thinking={"type": "adaptive"},
-        system=[
-            {
-                "type": "text",
-                "text": SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": build_user_message(n)}],
-        output_format=ClaimsExtraction,
-    )
-    return response.parsed_output, response.usage
+def extract(n: dict[str, Any]):
+    raw, usage = generate_json(SYSTEM_PROMPT, build_user_message(n))
+    return ClaimsExtraction.model_validate_json(raw), usage
 
 
 def main(limit: int | None = None) -> None:
-    client = anthropic.Anthropic()
     conn = connect()
     try:
         with conn.cursor() as cur:
@@ -205,11 +200,19 @@ def main(limit: int | None = None) -> None:
 
         total_claims = 0
         for i, n in enumerate(noticias, 1):
+            if i > 1:
+                time.sleep(SLEEP_ENTRE_LLAMADAS)
             try:
-                extraction, usage = extract(client, n)
-            except anthropic.APIError as e:
+                extraction, usage = extract(n)
+            except GeminiError as e:
                 print(
                     f"  ! [{i}/{len(noticias)}] {n['id']}: API error — {e}",
+                    file=sys.stderr,
+                )
+                continue
+            except ValidationError as e:
+                print(
+                    f"  ! [{i}/{len(noticias)}] {n['id']}: respuesta fuera de schema — {e}",
                     file=sys.stderr,
                 )
                 continue
@@ -250,11 +253,12 @@ def main(limit: int | None = None) -> None:
                 continue
 
             total_claims += len(extraction.claims)
-            cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+            tokens_in = usage.get("promptTokenCount", 0)
+            tokens_out = usage.get("candidatesTokenCount", 0)
             print(
                 f"  [{i:3d}/{len(noticias)}] "
                 f"{(n['titular'] or '')[:60]:60} "
-                f"+{len(extraction.claims)} claims  cache:{cache_read}"
+                f"+{len(extraction.claims)} claims  tokens:{tokens_in}/{tokens_out}"
             )
 
         print(

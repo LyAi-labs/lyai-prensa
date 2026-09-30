@@ -1,5 +1,7 @@
 """
-Juez automático de contradicciones entre claims, usando Claude Sonnet 5.
+Juez automático de contradicciones entre claims, usando Gemini Flash (el
+modelo exacto vive en pipeline/gemini.py — no lo dupliques aquí, cambia
+según lo que Google mantenga en el tier gratuito).
 
 Para cada claim con embedding, busca candidatos por similitud coseno
 (sobremuestreo HNSW top-50, filtrado en Python: distinta noticia, par no
@@ -12,7 +14,9 @@ sus candidatos a la vez. Escribe todo veredicto en `prensa.pares_evaluados`
 Idempotente y acumulativo: procesa TODOS los claims con embedding en cada
 corrida (no solo los nuevos), porque un claim antiguo puede tener un
 candidato nuevo que no existía la vez anterior. El coste real está acotado
-por `pares_evaluados`: si ya se evaluó un par, no se vuelve a mandar al LLM.
+por `pares_evaluados`: si ya se evaluó un par, no se vuelve a mandar al LLM
+(y con el Gemini Flash del tier gratuito el coste es, de todos modos, cero
+mientras no se cambie a un modelo de pago — ver RULES-COSTS.md).
 
 Uso:
     python -m pipeline.judge_contradictions                 # todos los claims
@@ -23,24 +27,29 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Any, Literal
 
-import anthropic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from pipeline.db import connect
+from pipeline.gemini import GEMINI_MODEL, GeminiError, generate_json
 
 
-# Tope impuesto por el usuario: nunca modelos superiores a Sonnet 5, ni en
-# el pipeline ni en subagentes. Aun así es "la unidad sensible al modelo"
-# (ver comentario en extract_claims.py) — si en producción el juez muestra
-# demasiados falsos positivos sobre eval_pares, el primer palanca a tocar
-# es `output_config={"effort": ...}` antes que subir de modelo.
-JUEZ_MODEL = "claude-sonnet-5"
+# Antes "nunca modelos superiores a Sonnet 5". Ahora que el juez corre en
+# Gemini (RULES-COSTS.md: gratis mientras sea un modelo Flash del tier
+# gratuito), el techo equivalente es no subir a un modelo *Pro* o de pago
+# sin autorización de coste — no tocar esta constante sin pasar antes por
+# Ignacio.
+JUEZ_MODEL = GEMINI_MODEL
 
 ANN_OVERSAMPLE = 50  # candidatos brutos por claim (antes de filtrar)
 MAX_CANDIDATOS = 8  # candidatos que se le pasan al LLM tras filtrar
+
+# Ver SLEEP_ENTRE_LLAMADAS en extract_claims.py: mismo motivo (tier
+# gratuito de Gemini limitado a ~20 req/min, verificado 2026-09-29).
+SLEEP_ENTRE_LLAMADAS = 3.5
 
 CRITERIOS_PATH = Path(__file__).resolve().parent.parent / "docs" / "contradiccion-criterios.md"
 
@@ -187,26 +196,15 @@ def build_user_message(claim_fuente: dict[str, Any], candidatos: list[dict[str, 
     return "\n".join(lines)
 
 
-def judge(client: anthropic.Anthropic, claim_fuente: dict[str, Any], candidatos: list[dict[str, Any]]):
-    response = client.messages.parse(
-        model=JUEZ_MODEL,
-        max_tokens=8000,
-        thinking={"type": "adaptive"},
-        system=[
-            {
-                "type": "text",
-                "text": _load_system_prompt(),
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": build_user_message(claim_fuente, candidatos)}],
-        output_format=JuicioClaim,
+def judge(claim_fuente: dict[str, Any], candidatos: list[dict[str, Any]]):
+    raw, usage = generate_json(
+        _load_system_prompt(),
+        build_user_message(claim_fuente, candidatos),
     )
-    return response.parsed_output, response.usage
+    return JuicioClaim.model_validate_json(raw), usage
 
 
 def main(limit: int | None = None) -> None:
-    client = anthropic.Anthropic()
     conn = connect()
     try:
         with conn.cursor() as cur:
@@ -218,6 +216,7 @@ def main(limit: int | None = None) -> None:
 
         total_veredictos = 0
         total_contradicciones = 0
+        llamadas_hechas = 0
         for i, claim_fuente in enumerate(claims, 1):
             with conn.cursor() as cur:
                 candidatos_raw = fetch_candidatos(cur, claim_fuente)
@@ -226,10 +225,17 @@ def main(limit: int | None = None) -> None:
             if not candidatos:
                 continue
 
+            if llamadas_hechas > 0:
+                time.sleep(SLEEP_ENTRE_LLAMADAS)
+            llamadas_hechas += 1
+
             try:
-                juicio, usage = judge(client, claim_fuente, candidatos)
-            except anthropic.APIError as e:
+                juicio, usage = judge(claim_fuente, candidatos)
+            except GeminiError as e:
                 print(f"  ! [{i}/{len(claims)}] {claim_fuente['claim_id']}: API error — {e}", file=sys.stderr)
+                continue
+            except ValidationError as e:
+                print(f"  ! [{i}/{len(claims)}] {claim_fuente['claim_id']}: respuesta fuera de schema — {e}", file=sys.stderr)
                 continue
             except Exception as e:
                 print(f"  ! [{i}/{len(claims)}] {claim_fuente['claim_id']}: {e}", file=sys.stderr)
@@ -291,10 +297,11 @@ def main(limit: int | None = None) -> None:
 
             total_veredictos += len(juicio.veredictos)
             total_contradicciones += nuevas_contradicciones
-            cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+            tokens_in = usage.get("promptTokenCount", 0)
+            tokens_out = usage.get("candidatesTokenCount", 0)
             print(
                 f"  [{i:4d}/{len(claims)}] {len(candidatos)} candidatos  "
-                f"+{nuevas_contradicciones} contradicciones  cache:{cache_read}"
+                f"+{nuevas_contradicciones} contradicciones  tokens:{tokens_in}/{tokens_out}"
             )
 
         print(

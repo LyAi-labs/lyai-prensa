@@ -5,6 +5,12 @@
 
 const API_BASE: string = import.meta.env.VITE_API_BASE ?? '/api'
 
+export type Claim = {
+  sujeto: string
+  predicado: string
+  objeto: string
+}
+
 export type Contradiccion = {
   id: string
   noticiaContrariaId: string
@@ -12,6 +18,8 @@ export type Contradiccion = {
   tema: string
   intensidad: number
   razonamiento: string
+  claimPropio: Claim
+  claimContrario: Claim
 }
 
 export type NewsItem = {
@@ -21,6 +29,8 @@ export type NewsItem = {
   headline: string
   summary: string
   publishedAt: string
+  enlace: string
+  imagenUrl: string | null
   contradicciones: Contradiccion[]
 }
 
@@ -47,6 +57,7 @@ type ApiNoticia = {
   descripcion: string
   enlace: string
   publicada_en: string
+  imagen_url: string | null
   fuente_nombre: string
   fuente_color: string
   fuente_slug: string
@@ -74,6 +85,8 @@ function mapNoticia(n: ApiNoticia): NewsItem {
     headline: n.titular,
     summary: n.descripcion,
     publishedAt: formatPublishedAt(n.publicada_en),
+    enlace: n.enlace,
+    imagenUrl: n.imagen_url,
     contradicciones: n.contradicciones.map((c) => ({
       id: c.id,
       noticiaContrariaId: c.noticia_contraria_id,
@@ -81,13 +94,27 @@ function mapNoticia(n: ApiNoticia): NewsItem {
       tema: c.tema,
       intensidad: c.intensidad,
       razonamiento: c.razonamiento ?? '',
+      claimPropio: c.claim_propio,
+      claimContrario: c.claim_contrario,
     })),
   }
 }
 
-export async function fetchNoticias(limit = 108, offset = 0): Promise<NewsItem[]> {
-  const res = await fetch(`${API_BASE}/noticias?limit=${limit}&offset=${offset}`)
+export async function fetchNoticias(limit = 108, offset = 0, antes?: string): Promise<NewsItem[]> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (antes) params.set('antes', antes)
+  const res = await fetch(`${API_BASE}/noticias?${params}`)
   if (!res.ok) throw new Error(`API /noticias respondió ${res.status}`)
   const data: ApiNoticia[] = await res.json()
   return data.map(mapNoticia)
+}
+
+// YYYY-MM-DD de los días (en [desde, hasta)) con al menos una contradicción
+// — para marcarlos en el calendario del botón "Hoy". `hasta` es exclusivo.
+export async function fetchDiasContradiccion(desde: string, hasta: string): Promise<Set<string>> {
+  const params = new URLSearchParams({ desde, hasta })
+  const res = await fetch(`${API_BASE}/contradicciones/dias?${params}`)
+  if (!res.ok) throw new Error(`API /contradicciones/dias respondió ${res.status}`)
+  const data: string[] = await res.json()
+  return new Set(data)
 }

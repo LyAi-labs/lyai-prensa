@@ -11,11 +11,25 @@ from __future__ import annotations
 from typing import Any
 
 SELECT_NOTICIAS_SQL = """
-SELECT n.id, n.titular, n.descripcion, n.enlace, n.publicada_en,
+SELECT n.id, n.titular, n.descripcion, n.enlace, n.publicada_en, n.imagen_url,
        n.intensidad_contradiccion, n.eje_z,
        f.nombre AS fuente_nombre, f.color AS fuente_color, f.slug AS fuente_slug
 FROM prensa.noticias n
 JOIN prensa.fuentes f ON f.id = n.fuente_id
+ORDER BY n.publicada_en DESC
+LIMIT %(limit)s OFFSET %(offset)s;
+"""
+
+# Misma query que SELECT_NOTICIAS_SQL, pero anclada a una fecha — usada por
+# el botón "Hoy"/calendario del muro para saltar directo a un día en vez de
+# recorrer páginas de 108 en 108. Usa idx_noticias_publicada (ya existía).
+SELECT_NOTICIAS_ANTES_SQL = """
+SELECT n.id, n.titular, n.descripcion, n.enlace, n.publicada_en, n.imagen_url,
+       n.intensidad_contradiccion, n.eje_z,
+       f.nombre AS fuente_nombre, f.color AS fuente_color, f.slug AS fuente_slug
+FROM prensa.noticias n
+JOIN prensa.fuentes f ON f.id = n.fuente_id
+WHERE n.publicada_en <= %(antes)s
 ORDER BY n.publicada_en DESC
 LIMIT %(limit)s OFFSET %(offset)s;
 """
@@ -45,6 +59,25 @@ SELECT id, slug, nombre, color, sesgo
 FROM prensa.fuentes
 WHERE activo = true
 ORDER BY nombre;
+"""
+
+# Días (dentro de [desde, hasta)) que tienen al menos una contradicción —
+# para marcarlos en el calendario del muro. Cuenta un día si CUALQUIERA de
+# las dos noticias del par se publicó ese día (pueden diferir de fecha).
+SELECT_DIAS_CONTRADICCION_SQL = """
+SELECT DISTINCT (dia)::date AS dia FROM (
+    SELECT na.publicada_en AS dia
+    FROM prensa.contradicciones ctr
+    JOIN prensa.claims ca ON ca.id = ctr.claim_a_id
+    JOIN prensa.noticias na ON na.id = ca.noticia_id
+    UNION ALL
+    SELECT nb.publicada_en AS dia
+    FROM prensa.contradicciones ctr
+    JOIN prensa.claims cb ON cb.id = ctr.claim_b_id
+    JOIN prensa.noticias nb ON nb.id = cb.noticia_id
+) d
+WHERE dia >= %(desde)s AND dia < %(hasta)s
+ORDER BY 1;
 """
 
 

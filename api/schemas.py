@@ -24,6 +24,7 @@ class NoticiaOut(BaseModel):
     descripcion: str
     enlace: str
     publicada_en: str
+    imagen_url: str | None
     fuente_nombre: str
     fuente_color: str
     fuente_slug: str

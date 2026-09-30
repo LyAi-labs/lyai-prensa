@@ -13,6 +13,7 @@ docker-compose.yml). Sin CORS en prod — mismo origen tras el proxy.
 from __future__ import annotations
 
 import os
+from datetime import date, datetime
 
 from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.deps import get_db
 from api.queries import (
     SELECT_CONTRADICCIONES_SQL,
+    SELECT_DIAS_CONTRADICCION_SQL,
     SELECT_FUENTES_SQL,
+    SELECT_NOTICIAS_ANTES_SQL,
     SELECT_NOTICIAS_SQL,
     build_contradicciones_por_noticia,
 )
@@ -57,10 +60,14 @@ def health(conn=Depends(get_db)) -> HealthOut:
 def listar_noticias(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    antes: datetime | None = Query(default=None, description="Ancla al botón Hoy/calendario: solo noticias publicadas hasta esta fecha"),
     conn=Depends(get_db),
 ) -> list[NoticiaOut]:
     with conn.cursor() as cur:
-        cur.execute(SELECT_NOTICIAS_SQL, {"limit": limit, "offset": offset})
+        if antes is not None:
+            cur.execute(SELECT_NOTICIAS_ANTES_SQL, {"limit": limit, "offset": offset, "antes": antes})
+        else:
+            cur.execute(SELECT_NOTICIAS_SQL, {"limit": limit, "offset": offset})
         noticias = _rows_as_dicts(cur)
 
     if not noticias:
@@ -80,6 +87,7 @@ def listar_noticias(
             descripcion=n["descripcion"] or "",
             enlace=n["enlace"],
             publicada_en=n["publicada_en"].isoformat(),
+            imagen_url=n["imagen_url"],
             fuente_nombre=n["fuente_nombre"],
             fuente_color=n["fuente_color"],
             fuente_slug=n["fuente_slug"],
@@ -100,3 +108,17 @@ def listar_fuentes(conn=Depends(get_db)) -> list[FuenteOut]:
         FuenteOut(id=str(r["id"]), slug=r["slug"], nombre=r["nombre"], color=r["color"], sesgo=r["sesgo"])
         for r in rows
     ]
+
+
+@app.get("/api/contradicciones/dias", response_model=list[date])
+def listar_dias_contradiccion(
+    desde: date = Query(...),
+    hasta: date = Query(..., description="Exclusivo — normalmente desde + 1 mes"),
+    conn=Depends(get_db),
+) -> list[date]:
+    """Días con al menos una contradicción, para pintarlos en el calendario
+    del muro. Rango acotado a un mes por el frontend — barato hoy (1 fila en
+    toda la BD), pero evita un escaneo sin límite según crezca el pipeline."""
+    with conn.cursor() as cur:
+        cur.execute(SELECT_DIAS_CONTRADICCION_SQL, {"desde": desde, "hasta": hasta})
+        return [r[0] for r in cur.fetchall()]

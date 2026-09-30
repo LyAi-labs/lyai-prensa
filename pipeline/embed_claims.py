@@ -1,14 +1,22 @@
 """
-Embeddings de claims vía Voyage AI, para poder buscar candidatos por
-similitud coseno antes de invocar al juez LLM (ver judge_contradictions.py).
+Embeddings de claims vía Ollama local (`bge-m3`), para poder buscar
+candidatos por similitud coseno antes de invocar al juez LLM (ver
+judge_contradictions.py).
+
+Antes usaba Voyage AI (voyage-4, de pago) — se sustituyó porque el
+proyecto no puede gastar en APIs hasta que genere ingresos (ver
+RULES-COSTS.md). `bge-m3` corre localmente en el mismo servidor (Ollama,
+sin GPU) y por suerte da 1024 dimensiones igual que Voyage, así que no
+hizo falta tocar el esquema/la migración. Es además multilingüe, lo que
+importa aquí: hay fuentes en catalán y euskera además de castellano.
 
 Por cada claim en `prensa.claims` que aún no tenga fila en `prensa.embeddings`,
-genera su vector con Voyage AI (modelo `voyage-4`, 1024 dimensiones) e inserta
-en `prensa.embeddings`.
+genera su vector con Ollama e inserta en `prensa.embeddings`.
 
 Idempotente: re-ejecutar solo procesa claims sin embedding (NOT EXISTS). Se
-embebe en lote (Voyage acepta varios textos por llamada), a diferencia del
-extractor de claims que necesita una llamada de razonamiento por noticia.
+embebe en lote vía `/api/embed` (Ollama acepta varios textos por llamada,
+igual que hacía Voyage), a diferencia del extractor de claims que necesita
+una llamada de razonamiento por noticia.
 
 Uso:
     python -m pipeline.embed_claims                 # todos los pendientes
@@ -18,17 +26,19 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import Any
 
-import voyageai
+import httpx
 
 from pipeline.db import connect
 
 
-EMBEDDING_MODEL = "voyage-4"
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+EMBEDDING_MODEL = "bge-m3"
 EMBEDDING_DIM = 1024
-BATCH_SIZE = 128  # claims por llamada a Voyage
+BATCH_SIZE = 128  # claims por llamada a Ollama
 
 
 SELECT_PENDING_SQL = """
@@ -70,8 +80,17 @@ def vector_literal(values: list[float]) -> str:
     return "[" + ",".join(repr(v) for v in values) + "]"
 
 
+def embed_batch(textos: list[str]) -> list[list[float]]:
+    resp = httpx.post(
+        f"{OLLAMA_BASE_URL}/api/embed",
+        json={"model": EMBEDDING_MODEL, "input": textos},
+        timeout=120.0,
+    )
+    resp.raise_for_status()
+    return resp.json()["embeddings"]
+
+
 def main(limit: int | None = None) -> None:
-    client = voyageai.Client()
     conn = connect()
     try:
         with conn.cursor() as cur:
@@ -86,14 +105,7 @@ def main(limit: int | None = None) -> None:
             batch = claims[i : i + BATCH_SIZE]
             textos = [build_texto_origen(c) for c in batch]
             try:
-                # input_type=None: la comparación es simétrica claim-contra-
-                # claim, no búsqueda asimétrica query-vs-documento.
-                result = client.embed(
-                    textos,
-                    model=EMBEDDING_MODEL,
-                    input_type=None,
-                    output_dimension=EMBEDDING_DIM,
-                )
+                vectores = embed_batch(textos)
             except Exception as e:
                 print(
                     f"  ! lote [{i}:{i + len(batch)}]: {e}",
@@ -103,7 +115,7 @@ def main(limit: int | None = None) -> None:
 
             try:
                 with conn.cursor() as cur:
-                    for claim, vec in zip(batch, result.embeddings):
+                    for claim, vec in zip(batch, vectores):
                         cur.execute(
                             INSERT_EMBEDDING_SQL,
                             {
