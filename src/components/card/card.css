@@ -16,7 +16,6 @@
 
 .pc-tilt {
   transform: perspective(900px) translateY(var(--lift)) rotateX(var(--rx)) rotateY(var(--ry));
-  transform-style: preserve-3d;
   transition: transform 0.22s ease-out;
 }
 
@@ -25,11 +24,8 @@
   border-radius: 14px;
   cursor: pointer;
   outline: none;
-  transform-style: preserve-3d;
-  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
 }
 
-.pc.is-flipped .pc-inner { transform: rotateY(180deg); }
 .pc-inner:focus-visible { box-shadow: 0 0 0 2px #00e5ff, 0 0 0 5px #050709; }
 
 .pc-face {
@@ -38,8 +34,6 @@
   border-radius: 14px;
   background: #12151c;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.9);
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
@@ -269,7 +263,6 @@
 .pc-back {
   position: absolute;
   inset: 0;
-  transform: rotateY(180deg);
   display: flex;
   flex-direction: column;
   background: linear-gradient(160deg, #14171e 0%, #0b0d12 75%);
@@ -542,23 +535,40 @@
   .pc-title { font-size: 14.5px; }
 }
 
-/* ── Una sola cara visible a la vez ──────────────────────────────────────────
-   No se fía de backface-visibility: algunos motores la ignoran si aplanan el
-   3D (entonces se veían las dos caras superpuestas, una en espejo). La cara
-   que sale se oculta a mitad del giro (0,3 s de 0,6 s). */
+/* ── Giro en dos tiempos, sin 3D con caras traseras ──────────────────────────
+   La cara frontal gira 0→90° (queda de canto) y se oculta; el reverso entra
+   de -90°→0. Cada cara lleva su propia perspective(): no hay preserve-3d ni
+   backface-visibility de los que depender (algunos motores los aplanan o los
+   ignoran y se veían las dos caras superpuestas, una en espejo). */
 
-.pc-front,
-.pc-back {
-  transition: box-shadow 0.3s ease, border-color 0.3s ease, visibility 0s linear 0.3s;
+.pc-front {
+  transform: perspective(900px) rotateY(0deg);
+  transition: transform 0.28s ease-out 0.28s, visibility 0s linear 0.28s, box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
-.pc-back { visibility: hidden; }
-.pc.is-flipped .pc-front { visibility: hidden; }
-.pc.is-flipped .pc-back { visibility: visible; }
+.pc-back {
+  visibility: hidden;
+  transform: perspective(900px) rotateY(-90deg);
+  transition: transform 0.28s ease-in, visibility 0s linear 0.28s;
+}
+
+.pc.is-flipped .pc-front {
+  visibility: hidden;
+  transform: perspective(900px) rotateY(90deg);
+  transition: transform 0.28s ease-in, visibility 0s linear 0.28s, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.pc.is-flipped .pc-back {
+  visibility: visible;
+  transform: perspective(900px) rotateY(0deg);
+  transition: transform 0.28s ease-out 0.28s, visibility 0s linear 0.28s;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .pc-front,
-  .pc-back { transition-delay: 0s; }
+  .pc-back,
+  .pc.is-flipped .pc-front,
+  .pc.is-flipped .pc-back { transition: none; }
 }
 
 /* ── Pantalla de carga ───────────────────────────────────────────────────── */
