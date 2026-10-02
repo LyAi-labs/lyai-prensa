@@ -18,7 +18,7 @@ type Props = {
   // card NO escucha «parar» por su cuenta (overlay del muro WebGL); si no, la
   // card detecta ratón quieto / dedo mantenido (rejilla DOM).
   peek?: boolean
-  onPeekChange?: (peek: boolean) => void
+  onPeekChange?: (id: string, peek: boolean) => void
   // Etiqueta «× N medios cuentan esto» sobre la card (misma historia).
   storyCount?: number
   // Rejilla DOM: estado de la card cuando otra está en «misma historia».
@@ -37,11 +37,11 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
     enabled: !controlled && !flipped,
     onDwell: () => {
       setPeekInternal(true)
-      onPeekChange?.(true)
+      onPeekChange?.(item.id, true)
     },
     onEnd: () => {
       setPeekInternal(false)
-      onPeekChange?.(false)
+      onPeekChange?.(item.id, false)
     },
   })
 
