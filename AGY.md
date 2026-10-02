@@ -351,3 +351,15 @@ de memoria, quedó retirado.
 ---
 
 **Creado**: 2026-09-17 · **Gestiona**: Claude Code (PM, jefe de desarrollo)
+
+
+## 🧩 Componentes compartidos (`src/shared/`) y veto — 2026-10-02
+
+- `src/shared/` es **copia sincronizada de `/opt/lyai/app/lyai-shared`** (flip-card, anchored-overlay, view-switch, splash-screen,
+  timeline, drag-bento, use-dwell, use-spotlight). **No se edita aquí**: se cambia en `lyai-shared` y
+  `/opt/lyai/app/lyai-shared/bin/lyai-shared-sync . --update` (en las DOS ramas: normal y v2). Estado: `lyai-shared-sync . --check`.
+- En prensa queda solo el contenido y el dominio: `card/NewsCard` (sobre FlipCard), `card/CardOverlay` (sobre AnchoredOverlay),
+  `card/Splash` (sobre SplashScreen), `views/TimelineView` (sobre Timeline), `bento/BentoWall` (v2, sobre DragBento).
+- **Antes de `git push`/deploy: `cat /opt/lyai/state/aurelius-veto.json`**; si `"active": true`, avisar a Ignacio (regla transversal).
+- Mapa de la empresa: `/opt/lyai/wiki/pages/mapa-empresa-lyai.md`.
+  <!-- verify: test -f /opt/lyai/app/lyai-prensa/src/shared/lyai-shared.manifest.json -->
