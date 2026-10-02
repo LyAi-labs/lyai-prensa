@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchNumFuentes } from '../../data/newsApi'
+import './card.css'
 
 const MIN_MS = 3000
 const EXIT_MS = 900

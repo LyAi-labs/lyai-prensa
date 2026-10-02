@@ -1,9 +1,11 @@
-import { memo, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
+import { memo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import type { NewsItem } from '../../data/newsApi'
-import { contraColor, decodeEntities, dominio, fechaCorta, hash, hexToRgb, iniciales, legible } from './cardUtils'
+import { contraColor, dominio, fechaCorta, hash, hexToRgb, iniciales, legible } from './cardUtils'
+import { useDwell } from './useDwell'
+import './card.css'
 
-// Alturas de banner por card — da ritmo de "mampostería" a las columnas
-// sin depender de que la noticia tenga foto.
+// Alturas de banner por card — da ritmo de "mampostería" sin depender de que
+// la noticia tenga foto.
 const BANNER_H = [112, 148, 184]
 const TILT_MAX = 6
 
@@ -12,15 +14,36 @@ type Props = {
   flipped: boolean
   onToggle: (id: string) => void
   contrarioEnlace?: string
+  // Peek (hoja con el resumen completo). Si se pasa, lo controla el padre y la
+  // card NO escucha «parar» por su cuenta (overlay del muro WebGL); si no, la
+  // card detecta ratón quieto / dedo mantenido (rejilla DOM).
+  peek?: boolean
+  onPeekChange?: (id: string, peek: boolean) => void
+  // Etiqueta «× N medios cuentan esto» sobre la card (misma historia).
+  storyCount?: number
+  // Rejilla DOM: estado de la card cuando otra está en «misma historia».
+  storyState?: 'origin' | 'same' | 'dim' | null
 }
 
-function NewsCard({ item: raw, flipped, onToggle, contrarioEnlace }: Props) {
-  const item = useMemo(
-    () => ({ ...raw, headline: decodeEntities(raw.headline), summary: decodeEntities(raw.summary) }),
-    [raw],
-  )
+function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, onPeekChange, storyCount, storyState }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
+  const [peekInternal, setPeekInternal] = useState(false)
+
+  const controlled = peekProp !== undefined
+  const peek = (controlled ? peekProp : peekInternal) && !flipped
+
+  const { consumeTouchClick } = useDwell(rootRef, {
+    enabled: !controlled && !flipped,
+    onDwell: () => {
+      setPeekInternal(true)
+      onPeekChange?.(item.id, true)
+    },
+    onEnd: () => {
+      setPeekInternal(false)
+      onPeekChange?.(item.id, false)
+    },
+  })
 
   const contra = item.contradicciones[0]
   const cColor = contra ? contraColor(contra.intensidad) : null
@@ -65,12 +88,14 @@ function NewsCard({ item: raw, flipped, onToggle, contrarioEnlace }: Props) {
     '--c-text': legible(item.sourceColor),
     '--contra': cColor ?? 'transparent',
     '--banner-h': `${bannerH}px`,
+    // Profundidad con la que sale del plano en la rejilla 3D (más intensidad, más Z).
+    '--pop': `${Math.round(40 + (contra?.intensidad ?? 0) * 70)}px`,
   } as CSSProperties
 
   return (
     <div
       ref={rootRef}
-      className={`pc${contra ? ' pc-has-contra' : ''}${flipped ? ' is-flipped' : ''}`}
+      className={`pc${contra ? ' pc-has-contra' : ''}${flipped ? ' is-flipped' : ''}${peek ? ' is-peek' : ''}${storyState ? ` is-${storyState}` : ''}`}
       style={style}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
@@ -83,7 +108,10 @@ function NewsCard({ item: raw, flipped, onToggle, contrarioEnlace }: Props) {
           tabIndex={0}
           aria-pressed={flipped}
           aria-label={`${item.source}: ${item.headline}`}
-          onClick={() => onToggle(item.id)}
+          onClick={() => {
+            if (consumeTouchClick()) return
+            onToggle(item.id)
+          }}
           onKeyDown={onKeyDown}
         >
           {/* ── Frente ─────────────────────────────────────────────── */}
@@ -127,12 +155,36 @@ function NewsCard({ item: raw, flipped, onToggle, contrarioEnlace }: Props) {
               </span>
             </div>
 
+            {storyState === 'same' && <span className="pc-same-chip">misma historia</span>}
+
             {contra && (
               <div className="pc-contra-bar">
                 <span>⚠ Contradice a {contra.fuenteContraria}</span>
                 <b>{contra.intensidad.toFixed(1)}</b>
               </div>
             )}
+
+            {/* Peek: resumen completo y acciones. */}
+            <div className="peek-sheet" aria-hidden={!peek}>
+              <div className="peek-full">{item.summary || item.headline}</div>
+              <div className="peek-acts">
+                {item.enlace && (
+                  <a href={item.enlace} target="_blank" rel="noreferrer" tabIndex={peek ? 0 : -1} onClick={(e) => e.stopPropagation()}>
+                    Leer ↗
+                  </a>
+                )}
+                <button
+                  type="button"
+                  tabIndex={peek ? 0 : -1}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggle(item.id)
+                  }}
+                >
+                  Girar ↻
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* ── Reverso ────────────────────────────────────────────── */}
@@ -206,6 +258,11 @@ function NewsCard({ item: raw, flipped, onToggle, contrarioEnlace }: Props) {
           </div>
         </div>
       </div>
+
+      <div className="dwell-ring" aria-hidden="true" />
+      {storyCount !== undefined && storyCount > 1 && (
+        <span className="story-badge">× {storyCount} medios cuentan esto</span>
+      )}
     </div>
   )
 }

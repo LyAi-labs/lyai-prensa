@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { generateSampleNews, type NewsItem as MockNewsItem } from '../data/sampleNews'
-import { fetchDiasContradiccion, fetchNoticias, type Contradiccion, type NewsItem } from '../data/newsApi'
+import { fetchDiasContradiccion, fetchNoticias, type NewsItem } from '../data/newsApi'
+import CardOverlay, { type OverlayState } from './card/CardOverlay'
+import { contraColor, fechaCorta, iniciales, legible, storyKey } from './card/cardUtils'
 import './Wall.css'
 
 const ROWS = 3
@@ -44,17 +46,25 @@ const JUMP_ENTER_DURATION = 0.55
 // textura de 520x340px se magnificaba y se veía borrosa. 4 da margen de sobra.
 const TEX_SCALE = 4
 
-// Rojo >0.7 (contradicción fuerte), ámbar 0.4-0.7, amarillo <0.4 — puntos de
-// partida sin validar contra volumen real (hoy solo hay 1 contradicción en
-// producción), ver dev-xplain 2026-09-29-2206-prensa-card-header-medio-seccion.
-function contraColor(intensidad: number): string {
-  if (intensidad > 0.7) return '#ef4444'
-  if (intensidad > 0.4) return '#f59e0b'
-  return '#eab308'
-}
+// Contradicciones: salen del plano (eje Z) tanto más cuanto más intensas, con
+// un halo que late. POP_OUT_Z se conserva como suelo de profundidad.
+const CONTRA_Z_BASE = 70
+const CONTRA_Z_RANGE = 80
+const CONTRA_SCALE = 1.03
+const HALO_W = TILE_W * 1.55
+const HALO_H = TILE_H * 1.75
+
+// «Parar» (peek): ratón quieto 450 ms o dedo mantenido 350 ms sin moverse.
+const DWELL_MOUSE_MS = 450
+const DWELL_TOUCH_MS = 350
+const DWELL_MOUSE_JITTER = 3
+const DWELL_TOUCH_SLOP = 10
+const DWELL_MAX_VEL = 30
+
+// Misma historia en otros medios: las demás cards se atenúan.
+const STORY_DIM = 0.32
 
 const CONTRA_STRIP_H = 24
-const HEADER_H = 26
 
 // Trunca con "…" si no cabe en maxWidth, en vez de dejar que se solape con
 // lo que venga al lado — antes "EL DIARIO MONTAÑÉS (CANTABRIA)" se comía la
@@ -71,6 +81,22 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
   return text.slice(0, lo) + '…'
 }
 
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
+const FONT = 'system-ui, -apple-system, sans-serif'
+
+// Cara «editorial» (dev-xplain 2026-10-02-1737, opción A): barra lateral con
+// el color del medio, nombre en blanco (los colores de medio tienen contraste
+// 1,8–3,9 sobre este fondo), borde neutro — el rojo/ámbar queda reservado a
+// las contradicciones — y, si no hay resumen, el titular crece.
 function drawCard(item: NewsItem): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = TILE_W * TEX_SCALE
@@ -79,60 +105,129 @@ function drawCard(item: NewsItem): HTMLCanvasElement {
   ctx.scale(TEX_SCALE, TEX_SCALE)
 
   const contra = item.contradicciones[0]
-  const isContra = !!contra
-  const contentH = isContra ? TILE_H - CONTRA_STRIP_H : TILE_H
+  const accent = contra ? contraColor(contra.intensidad) : item.sourceColor
+  const R = 10
+  const barH = contra ? CONTRA_STRIP_H : 0
+  const hasSummary = !!item.summary
+  const { dia, hora } = fechaCorta(item.publishedAt)
 
+  // Fondo y recorte con esquinas redondeadas (la textura es transparente).
+  roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
   ctx.fillStyle = '#12151c'
-  ctx.fillRect(0, 0, TILE_W, TILE_H)
+  ctx.fill()
+  ctx.save()
+  roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
+  ctx.clip()
 
-  // Borde fino del color del medio en vez de bloque sólido de fondo — el
-  // color sigue identificando al medio de un vistazo, pero enmarcando en
-  // vez de rellenar (feedback: "el color solido es demasiado pobre").
-  ctx.strokeStyle = item.sourceColor
-  ctx.lineWidth = 1.5
-  ctx.strokeRect(0.75, 0.75, TILE_W - 1.5, TILE_H - 1.5)
+  ctx.fillStyle = accent
+  ctx.fillRect(0, 0, 3, TILE_H)
 
-  ctx.font = '800 13px system-ui, -apple-system, sans-serif'
+  // Cabecera: avatar con iniciales + nombre + fecha.
   ctx.fillStyle = item.sourceColor
-  ctx.fillText(fitText(ctx, item.source.toUpperCase(), TILE_W - 44), 12, HEADER_H / 2 + 8)
+  ctx.beginPath()
+  ctx.arc(27, 21, 9, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.font = `800 8px ${FONT}`
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(iniciales(item.source), 27, 21.5)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
 
+  const dateText = hora ? `${dia} · ${hora}` : dia
+  ctx.font = `500 10px ${FONT}`
+  const dateW = ctx.measureText(dateText).width
+  const iconW = item.imagenUrl ? 17 : 0
+  ctx.fillStyle = 'rgba(255,255,255,0.58)'
+  ctx.fillText(dateText, TILE_W - 12 - dateW, 25)
   if (item.imagenUrl) {
-    ctx.font = '11px system-ui, -apple-system, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'
-    ctx.fillText('🖼', TILE_W - 26, HEADER_H / 2 + 8)
+    // Icono de foto vectorial (antes un emoji, que parecía imagen rota).
+    const ix = TILE_W - 12 - dateW - 15
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+    ctx.lineWidth = 1.2
+    roundRectPath(ctx, ix, 17, 11, 8, 1.5)
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.beginPath()
+    ctx.arc(ix + 3.5, 20.2, 1.1, 0, Math.PI * 2)
+    ctx.fill()
   }
 
-  ctx.font = '10px system-ui, -apple-system, sans-serif'
-  ctx.fillStyle = 'rgba(255,255,255,0.4)'
-  ctx.fillText(item.publishedAt, 12, HEADER_H + 15)
+  ctx.font = `700 10.5px ${FONT}`
+  ctx.fillStyle = 'rgba(255,255,255,0.93)'
+  ctx.fillText(fitText(ctx, item.source.toUpperCase(), TILE_W - 44 - dateW - iconW - 14), 41, 25)
 
-  ctx.font = '600 15px system-ui, -apple-system, sans-serif'
-  ctx.fillStyle = '#f2f4f8'
-  wrapText(ctx, item.headline, 12, HEADER_H + 38, TILE_W - 24, 19, 3)
+  // Titular (crece si no hay resumen) y resumen.
+  const headSize = hasSummary ? 15 : 17
+  const headLine = hasSummary ? 19 : 21
+  ctx.font = `600 ${headSize}px ${FONT}`
+  ctx.fillStyle = '#f6f7fa'
+  wrapText(ctx, item.headline, 16, 54, TILE_W - 30, headLine, hasSummary ? 3 : 5)
 
-  ctx.font = '12px system-ui, -apple-system, sans-serif'
-  ctx.fillStyle = 'rgba(255,255,255,0.55)'
-  wrapText(ctx, item.summary, 12, HEADER_H + 104, TILE_W - 24, 15, Math.max(1, Math.floor((contentH - HEADER_H - 104) / 15)))
+  if (hasSummary) {
+    const top = 114
+    const lines = Math.max(1, Math.floor((TILE_H - barH - top - 8) / 14.5))
+    ctx.font = `11.5px ${FONT}`
+    ctx.fillStyle = 'rgba(255,255,255,0.62)'
+    wrapText(ctx, item.summary, 16, top, TILE_W - 30, 14.5, lines)
+  }
 
-  if (isContra) {
-    const color = contraColor(contra.intensidad)
-
-    ctx.fillStyle = color
-    ctx.globalAlpha = 0.14
-    ctx.fillRect(0, TILE_H - CONTRA_STRIP_H, TILE_W, CONTRA_STRIP_H)
+  if (contra) {
+    ctx.fillStyle = accent
+    ctx.globalAlpha = 0.18
+    ctx.fillRect(0, TILE_H - barH, TILE_W, barH)
+    ctx.globalAlpha = 0.45
+    ctx.fillRect(0, TILE_H - barH, TILE_W, 1)
     ctx.globalAlpha = 1
 
-    ctx.font = '700 11px system-ui, -apple-system, sans-serif'
-    ctx.fillStyle = color
-    const label = `CONTRADICE A ${contra.fuenteContraria.toUpperCase()}`
-    ctx.fillText(label, 12, TILE_H - CONTRA_STRIP_H / 2 + 4, TILE_W - 60)
-
     const score = contra.intensidad.toFixed(1)
-    ctx.font = '700 11px system-ui, -apple-system, sans-serif'
-    ctx.fillText(score, TILE_W - 14 - ctx.measureText(score).width, TILE_H - CONTRA_STRIP_H / 2 + 4)
+    ctx.font = `800 10px ${FONT}`
+    const chipW = ctx.measureText(score).width + 14
+    roundRectPath(ctx, TILE_W - 12 - chipW, TILE_H - barH + 5, chipW, 14, 7)
+    ctx.fillStyle = accent
+    ctx.fill()
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(score, TILE_W - 12 - chipW + 7, TILE_H - barH + 15.5)
+
+    ctx.font = `700 10px ${FONT}`
+    ctx.fillStyle = legible(accent, 0.4)
+    ctx.fillText(
+      fitText(ctx, `CONTRADICE A ${contra.fuenteContraria.toUpperCase()}`, TILE_W - 24 - chipW - 8),
+      16,
+      TILE_H - barH + 15.5,
+    )
   }
+  ctx.restore()
+
+  // Borde fino neutro; con contradicción, del color de la contradicción.
+  roundRectPath(ctx, 0.5, 0.5, TILE_W - 1, TILE_H - 1, R - 0.5)
+  ctx.strokeStyle = contra ? accent : 'rgba(255,255,255,0.1)'
+  ctx.lineWidth = contra ? 1.6 : 1
+  ctx.stroke()
 
   return c
+}
+
+// Halo suave (gradiente radial) compartido por todas las contradicciones y
+// por las cards de «misma historia»; el color lo pone el material.
+function makeHaloTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = 256
+  c.height = 256
+  const ctx = c.getContext('2d')!
+  const g = ctx.createRadialGradient(128, 128, 20, 128, 128, 128)
+  g.addColorStop(0, 'rgba(255,255,255,0.95)')
+  g.addColorStop(0.45, 'rgba(255,255,255,0.35)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 256, 256)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
 }
 
 function drawFloorArrow(label: string, isRight: boolean): HTMLCanvasElement {
@@ -226,22 +321,38 @@ function mockToNewsItem(m: MockNewsItem): NewsItem {
   }
 }
 
-export default function WallGL() {
+export default function WallGL({ onReady }: { onReady?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const debugRef = useRef<HTMLDivElement>(null)
+  const readyFiredRef = useRef(false)
   const flashRef = useRef<HTMLDivElement>(null)
   const itemsRef = useRef<NewsItem[]>([])
   // Puente hacia la escena Three.js viva, para que goToday()/goToDate()
   // (fuera del useEffect) puedan animar la cámara de salida antes de que
   // React re-monte la escena. null si todavía no ha montado ninguna.
-  const sceneApiRef = useRef<{ animateExit: (onDone: () => void) => void } | null>(null)
+  const sceneApiRef = useRef<{
+    animateExit: (onDone: () => void) => void
+    focusStory: (id: string | null) => void
+  } | null>(null)
   // true si el próximo montaje de la escena viene de un salto Hoy/calendario
   // (con animación de entrada) en vez de paginación normal (sin animación).
   const justJumpedRef = useRef(false)
   const [page, setPage] = useState(0)
   const [totalCount] = useState(3330)
-  const [activeContra, setActiveContra] = useState<{ item: NewsItem; contradiccion: Contradiccion } | null>(null)
-  const [activeNoticia, setActiveNoticia] = useState<NewsItem | null>(null)
+  // Card DOM que se coloca sobre la card del canvas (peek / giro). El ref
+  // espeja el estado para que la escena Three.js (cierre fuera de React) sepa
+  // si hay overlay abierto sin re-suscribirse.
+  const [overlay, setOverlayState] = useState<OverlayState | null>(null)
+  const overlayRef = useRef<OverlayState | null>(null)
+  const setOverlay = useCallback((next: OverlayState | null | ((cur: OverlayState | null) => OverlayState | null)) => {
+    const value = typeof next === 'function' ? next(overlayRef.current) : next
+    overlayRef.current = value
+    setOverlayState(value)
+  }, [])
+  const closeOverlay = useCallback(() => setOverlay(null), [setOverlay])
+  const toggleOverlayFlip = useCallback(
+    () => setOverlay((cur) => (cur ? { ...cur, flipped: !cur.flipped } : cur)),
+    [setOverlay],
+  )
   // Ancla de fecha del botón Hoy/calendario — YYYY-MM-DD, o null = "lo más
   // reciente" (comportamiento de siempre, sin filtro de fecha).
   const [dateAnchor, setDateAnchor] = useState<string | null>(null)
@@ -292,6 +403,10 @@ export default function WallGL() {
       }
       if (disposed) return
       itemsRef.current = items
+      if (!readyFiredRef.current) {
+        readyFiredRef.current = true
+        onReady?.()
+      }
 
       const animateIn = justJumpedRef.current
       justJumpedRef.current = false
@@ -342,7 +457,10 @@ export default function WallGL() {
         }
       }
 
+      // focusStory se asigna cuando existen las mallas (más abajo).
+      let focusStoryImpl: (id: string | null) => void = () => {}
       sceneApiRef.current = {
+        focusStory: (id) => focusStoryImpl(id),
         animateExit(onDone) {
           gsap.killTweensOf(jumpDolly)
           gsap.killTweensOf(renderer.domElement)
@@ -364,6 +482,22 @@ export default function WallGL() {
       const disposables: Array<{ dispose: () => void }> = [geo]
       const cardMeshes: THREE.Mesh[] = []
 
+      const haloGeo = new THREE.PlaneGeometry(HALO_W, HALO_H)
+      const haloTex = makeHaloTexture()
+      disposables.push(haloGeo, haloTex)
+      const contraHalos: Array<{ mat: THREE.MeshBasicMaterial; phase: number; base: number }> = []
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+
+      // «Misma historia»: titular normalizado → nº de medios en esta página.
+      const keyOf = new Map<string, string>()
+      const countOf = new Map<string, number>()
+      for (const it of items) {
+        const k = storyKey(it.headline)
+        if (!k) continue
+        keyOf.set(it.id, k)
+        countOf.set(k, (countOf.get(k) ?? 0) + 1)
+      }
+
       // Render de tarjetas de la página actual
       for (let row = 0; row < ROWS; row++) {
         for (let col = 0; col < COLS; col++) {
@@ -375,14 +509,31 @@ export default function WallGL() {
           disposables.push(tex, mat)
 
           const mesh = new THREE.Mesh(geo, mat)
-          mesh.position.set(
-            col * STEP_X - WALL_W / 2,
-            (ROWS / 2 - row - 0.5) * STEP_Y,
-            item.contradicciones.length > 0 ? POP_OUT_Z : 0,
-          )
+          const contra = item.contradicciones[0]
+          // Las contradicciones salen del plano hacia el espectador: más
+          // intensidad, más profundidad (parallax visible al barrer el muro).
+          const z = contra ? Math.max(POP_OUT_Z, CONTRA_Z_BASE + contra.intensidad * CONTRA_Z_RANGE) : 0
+          mesh.position.set(col * STEP_X - WALL_W / 2, (ROWS / 2 - row - 0.5) * STEP_Y, z)
+          if (contra) mesh.scale.setScalar(CONTRA_SCALE)
           mesh.userData = { item }
           wall.add(mesh)
           cardMeshes.push(mesh)
+
+          if (contra) {
+            const hmat = new THREE.MeshBasicMaterial({
+              map: haloTex,
+              color: new THREE.Color(contraColor(contra.intensidad)),
+              transparent: true,
+              opacity: 0.5,
+              depthWrite: false,
+              blending: THREE.AdditiveBlending,
+            })
+            disposables.push(hmat)
+            const halo = new THREE.Mesh(haloGeo, hmat)
+            halo.position.set(mesh.position.x, mesh.position.y, z - 6)
+            wall.add(halo)
+            contraHalos.push({ mat: hmat, phase: Math.random() * Math.PI * 2, base: 0.42 + contra.intensidad * 0.2 })
+          }
 
           // Reflejo espejado
           if (row === ROWS - 1) {
@@ -491,31 +642,143 @@ export default function WallGL() {
         return false
       }
 
-      // Solo abre un panel si la card tiene contradicción o foto — el resto
-      // del muro sigue siendo "solo panear", sin sorpresas al hacer click.
-      // La contradicción tiene prioridad (es la info más urgente).
-      const checkCardClick = (clientX: number, clientY: number) => {
+      const pickAt = (clientX: number, clientY: number): THREE.Mesh | null => {
         const rect = el.getBoundingClientRect()
         mouseVec.x = ((clientX - rect.left) / rect.width) * 2 - 1
         mouseVec.y = -((clientY - rect.top) / rect.height) * 2 + 1
         raycaster.setFromCamera(mouseVec, camera)
-        const intersects = raycaster.intersectObjects(cardMeshes)
-        if (intersects.length > 0) {
-          const item = intersects[0].object.userData.item as NewsItem
-          if (item?.contradicciones.length > 0) {
-            setActiveContra({ item, contradiccion: item.contradicciones[0] })
-            return true
-          }
-          if (item?.imagenUrl) {
-            setActiveNoticia(item)
-            return true
-          }
+        const hits = raycaster.intersectObjects(cardMeshes)
+        return hits.length ? (hits[0].object as THREE.Mesh) : null
+      }
+
+      const projectToScreen = (m: THREE.Mesh) => {
+        const v = new THREE.Vector3()
+        m.getWorldPosition(v)
+        v.project(camera)
+        const r = el.getBoundingClientRect()
+        return { cx: r.left + ((v.x + 1) / 2) * r.width, cy: r.top + ((1 - v.y) / 2) * r.height }
+      }
+
+      // Las cards del canvas no admiten efectos de DOM: peek, giro y spotlight
+      // «salen» a UNA card DOM (CardOverlay) colocada sobre la del canvas.
+      const openOverlay = (m: THREE.Mesh, opts: { flipped: boolean; sticky: boolean }) => {
+        const item = m.userData.item as NewsItem
+        const contra = item.contradicciones[0]
+        const k = keyOf.get(item.id)
+        setOverlay({
+          item,
+          ...projectToScreen(m),
+          flipped: opts.flipped,
+          sticky: opts.sticky,
+          storyCount: k ? (countOf.get(k) ?? 1) : 1,
+          contrarioEnlace: contra
+            ? itemsRef.current.find((i) => i.id === contra.noticiaContrariaId)?.enlace
+            : undefined,
+        })
+      }
+
+      // ── Misma historia: atenúa el resto y ilumina las gemelas ──────────
+      const dim = { v: 1 }
+      let dimKey: string | null = null
+      const storyHalos = new Map<THREE.Mesh, THREE.Mesh>()
+      const itemOf = (m: THREE.Mesh) => m.userData.item as NewsItem
+      const applyDim = () => {
+        for (const m of cardMeshes) {
+          const same = dimKey !== null && keyOf.get(itemOf(m).id) === dimKey
+          ;(m.material as THREE.MeshBasicMaterial).color.setScalar(dimKey === null || same ? 1 : dim.v)
         }
-        return false
+      }
+      const storyHaloFor = (m: THREE.Mesh): THREE.Mesh => {
+        let h = storyHalos.get(m)
+        if (!h) {
+          const hmat = new THREE.MeshBasicMaterial({
+            map: haloTex,
+            color: new THREE.Color('#00e5ff'),
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+          })
+          disposables.push(hmat)
+          h = new THREE.Mesh(haloGeo, hmat)
+          h.position.set(m.position.x, m.position.y, m.position.z - 8)
+          wall.add(h)
+          storyHalos.set(m, h)
+        }
+        return h
+      }
+      focusStoryImpl = (id) => {
+        const k = id ? keyOf.get(id) : undefined
+        const group = k && (countOf.get(k) ?? 0) > 1 ? k : null
+        gsap.killTweensOf(dim)
+        storyHalos.forEach((h) => (h.visible = false))
+        if (group) {
+          dimKey = group
+          for (const m of cardMeshes) if (keyOf.get(itemOf(m).id) === group) storyHaloFor(m).visible = true
+          gsap.to(dim, { v: STORY_DIM, duration: 0.3, ease: 'power2.out', onUpdate: applyDim })
+        } else {
+          gsap.to(dim, {
+            v: 1,
+            duration: 0.25,
+            ease: 'power2.out',
+            onUpdate: applyDim,
+            onComplete: () => {
+              dimKey = null
+              applyDim()
+            },
+          })
+        }
+      }
+
+      // ── «Parar»: ratón quieto o dedo mantenido sobre una card ──────────
+      let dwellTimer = 0
+      let dwellMesh: THREE.Mesh | null = null
+      let dwellX = 0
+      let dwellY = 0
+      let holdOpened = false
+      const clearDwell = () => {
+        window.clearTimeout(dwellTimer)
+        dwellTimer = 0
+        dwellMesh = null
+      }
+      const armDwell = (x: number, y: number, m: THREE.Mesh, touch: boolean) => {
+        clearDwell()
+        dwellMesh = m
+        dwellX = x
+        dwellY = y
+        dwellTimer = window.setTimeout(() => {
+          const hit = pickAt(dwellX, dwellY)
+          // Con el muro deslizándose bajo un cursor quieto no se abre nada.
+          if (!hit || hit !== dwellMesh || Math.abs(velX) > DWELL_MAX_VEL) return
+          if (touch) {
+            holdOpened = true
+            navigator.vibrate?.(12)
+          }
+          openOverlay(hit, { flipped: false, sticky: touch })
+        }, touch ? DWELL_TOUCH_MS : DWELL_MOUSE_MS)
+      }
+
+      const onHover = (e: PointerEvent) => {
+        if (e.pointerType === 'touch' || dragging || overlayRef.current) return
+        const m = pickAt(e.clientX, e.clientY)
+        el.style.cursor = m ? 'pointer' : 'grab'
+        if (!m) {
+          clearDwell()
+          return
+        }
+        if (m !== dwellMesh || Math.hypot(e.clientX - dwellX, e.clientY - dwellY) > DWELL_MOUSE_JITTER) {
+          armDwell(e.clientX, e.clientY, m, false)
+        }
+      }
+
+      const onCanvasLeave = (e: PointerEvent) => {
+        if (e.pointerType !== 'touch') clearDwell()
       }
 
       const onDown = (e: PointerEvent) => {
         if (e.button !== 0) return
+        clearDwell()
+        holdOpened = false
         dragging = true
         lastX = e.clientX
         startX = e.clientX
@@ -525,9 +788,21 @@ export default function WallGL() {
         velX = 0
         el.setPointerCapture(e.pointerId)
         el.style.cursor = 'grabbing'
+        if (e.pointerType === 'touch') {
+          const m = pickAt(e.clientX, e.clientY)
+          if (m) armDwell(e.clientX, e.clientY, m, true)
+        }
       }
 
       const onMove = (e: PointerEvent) => {
+        // Con el dedo, moverse más de DWELL_TOUCH_SLOP es scroll: no es «parar».
+        if (
+          e.pointerType === 'touch' &&
+          dwellTimer &&
+          Math.hypot(e.clientX - dwellX, e.clientY - dwellY) > DWELL_TOUCH_SLOP
+        ) {
+          clearDwell()
+        }
         if (!dragging) return
         const dx = (e.clientX - lastX) * worldPerPixel()
         lastX = e.clientX
@@ -536,15 +811,26 @@ export default function WallGL() {
       }
 
       const onUp = (e: PointerEvent) => {
+        clearDwell()
         if (!dragging) return
         dragging = false
         el.style.cursor = 'grab'
 
+        if (holdOpened) {
+          // El peek ya se abrió con el dedo mantenido: soltar no es un click.
+          holdOpened = false
+          return
+        }
+
         const moveDist = Math.hypot(e.clientX - startX, e.clientY - startY)
         if (moveDist < 6) {
-          // Fue un click limpio sin arrastre → comprobar flecha de suelo, luego card
+          // Click limpio sin arrastre → flecha de suelo, o card girada.
           if (checkFloorClick(e.clientX, e.clientY)) return
-          if (checkCardClick(e.clientX, e.clientY)) return
+          const m = pickAt(e.clientX, e.clientY)
+          if (m) {
+            openOverlay(m, { flipped: true, sticky: false })
+            return
+          }
         }
 
         if (samples.length >= 2) {
@@ -557,6 +843,7 @@ export default function WallGL() {
 
       const onWheel = (e: WheelEvent) => {
         e.preventDefault()
+        clearDwell()
         if (e.ctrlKey) {
           zoomTarget = Math.max(
             ZOOM_MIN,
@@ -569,6 +856,8 @@ export default function WallGL() {
       }
 
       el.addEventListener('pointerdown', onDown)
+      el.addEventListener('pointermove', onHover)
+      el.addEventListener('pointerleave', onCanvasLeave)
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
       el.addEventListener('wheel', onWheel, { passive: false })
@@ -619,14 +908,10 @@ export default function WallGL() {
 
         renderer.render(scene, camera)
 
-        // HUD de depuración — escribe directo al DOM (sin setState) para no
-        // añadir un re-render de React a 60fps.
-        if (debugRef.current) {
-          debugRef.current.textContent =
-            `z: ${camera.position.z.toFixed(0)} (CAM_Z ${CAM_Z} + zoom ${zoomCurrent.toFixed(0)})  ·  ` +
-            `x: ${renderX.toFixed(0)}  ·  ` +
-            `zoomTarget: ${zoomTarget.toFixed(0)}  ·  ` +
-            `px/world: ${worldPerPixel().toFixed(3)}`
+        // Halo de las contradicciones: late despacio (quieto con «reducir movimiento»).
+        const tSec = now / 1000
+        for (const h of contraHalos) {
+          h.mat.opacity = reduceMotion ? h.base : h.base + 0.16 * Math.sin(tSec * 2.2 + h.phase)
         }
       }
       tick()
@@ -634,6 +919,11 @@ export default function WallGL() {
       cleanup = () => {
         cancelAnimationFrame(raf)
         el.removeEventListener('pointerdown', onDown)
+        el.removeEventListener('pointermove', onHover)
+        el.removeEventListener('pointerleave', onCanvasLeave)
+        clearDwell()
+        gsap.killTweensOf(dim)
+        setOverlay(null)
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', onUp)
         el.removeEventListener('wheel', onWheel)
@@ -652,6 +942,13 @@ export default function WallGL() {
       cleanup?.()
     }
   }, [page, dateAnchor])
+
+  // «Misma historia»: con una card abierta, la escena atenúa el resto y
+  // ilumina las gemelas; al cerrarla, vuelve todo.
+  const overlayItemId = overlay?.item.id ?? null
+  useEffect(() => {
+    sceneApiRef.current?.focusStory(overlayItemId)
+  }, [overlayItemId])
 
   const startNewsIdx = page * PAGE_SIZE + 1
   const endNewsIdx = Math.min((page + 1) * PAGE_SIZE, totalCount)
@@ -704,7 +1001,7 @@ export default function WallGL() {
       <div className="wall-overlay">
         <div className="wall-header">
           <h1 className="wall-title">LyAi · Prensa</h1>
-          <p className="wall-subtitle">Muro 3D · Perspectiva real · Inercia Newton</p>
+          <p className="wall-subtitle">Lo que cuentan los medios españoles — y cuándo no coinciden</p>
         </div>
 
         <div className="wall-legend">
@@ -716,197 +1013,12 @@ export default function WallGL() {
         </div>
       </div>
 
-      {/* HUD de depuración — cámara Z (zoom) y X (paneo horizontal), para
-          diagnosticar el desenfoque de las tarjetas a distintas distancias. */}
-      <div
-        ref={debugRef}
-        style={{
-          position: 'absolute',
-          bottom: 10,
-          right: 12,
-          fontFamily: 'ui-monospace, monospace',
-          fontSize: 11,
-          color: 'rgba(255,255,255,0.55)',
-          background: 'rgba(0,0,0,0.35)',
-          padding: '3px 8px',
-          borderRadius: 4,
-          pointerEvents: 'none',
-          userSelect: 'none',
-        }}
-      />
-
       {/* Flash de marca que tapa el corte real del remount de Three.js al
           saltar por Hoy/calendario — GSAP lo anima vía flashRef, sin
-          re-render de React (mismo patrón que el HUD de depuración). */}
+          re-render de React. */}
       <div ref={flashRef} className="wall-jump-flash" />
 
-      {activeContra && (
-        <ContradiccionPanel
-          data={activeContra}
-          contrarioEnlace={
-            itemsRef.current.find((i) => i.id === activeContra.contradiccion.noticiaContrariaId)?.enlace
-          }
-          onClose={() => setActiveContra(null)}
-        />
-      )}
-
-      {activeNoticia && <NoticiaPanel item={activeNoticia} onClose={() => setActiveNoticia(null)} />}
-    </div>
-  )
-}
-
-function ContradiccionPanel({
-  data,
-  contrarioEnlace,
-  onClose,
-}: {
-  data: { item: NewsItem; contradiccion: Contradiccion }
-  contrarioEnlace?: string
-  onClose: () => void
-}) {
-  const { item, contradiccion: c } = data
-  const color = contraColor(c.intensidad)
-  const nivel = c.intensidad > 0.7 ? 'fuerte' : c.intensidad > 0.4 ? 'moderada' : 'leve'
-
-  return (
-    <div className="contra-backdrop" onClick={onClose}>
-      <div
-        className="contra-panel spotlight-card"
-        style={{ '--spotlight-rgb': hexToRgb(color) } as CSSProperties}
-        onMouseMove={onSpotlightMove}
-        onMouseLeave={onSpotlightLeave}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="contra-panel-head">
-          <span className="contra-panel-title" style={{ color }}>
-            ⚠ Contradicción detectada · {c.tema}
-          </span>
-          <button className="contra-panel-close" onClick={onClose} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
-
-        <div className="contra-panel-meter">
-          <div className="contra-meter-labels">
-            <span>Intensidad del desacuerdo</span>
-            <span style={{ color }}>
-              {c.intensidad.toFixed(1)} · {nivel}
-            </span>
-          </div>
-          <div className="contra-meter-track">
-            <div
-              className="contra-meter-fill"
-              style={{ width: `${c.intensidad * 100}%`, background: color }}
-            />
-          </div>
-        </div>
-
-        <div className="contra-panel-cols">
-          <div className="contra-col">
-            <div className="contra-col-source" style={{ color: item.sourceColor }}>
-              {item.source.toUpperCase()}
-            </div>
-            <div className="contra-col-claim">
-              "{c.claimPropio.sujeto} {c.claimPropio.predicado} {c.claimPropio.objeto}"
-            </div>
-            {item.enlace && (
-              <a className="contra-col-link" href={item.enlace} target="_blank" rel="noreferrer">
-                Leer noticia ↗
-              </a>
-            )}
-          </div>
-          <div className="contra-col">
-            <div className="contra-col-source">{c.fuenteContraria.toUpperCase()}</div>
-            <div className="contra-col-claim">
-              "{c.claimContrario.sujeto} {c.claimContrario.predicado} {c.claimContrario.objeto}"
-            </div>
-            {contrarioEnlace && (
-              <a className="contra-col-link" href={contrarioEnlace} target="_blank" rel="noreferrer">
-                Leer noticia ↗
-              </a>
-            )}
-          </div>
-        </div>
-
-        {c.razonamiento && (
-          <div className="contra-panel-reasoning">
-            <b>Razonamiento del juez:</b> {c.razonamiento}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function dominio(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
-
-// SpotlightCard (ver Componentes/Spotlight Card) — glow que sigue al cursor
-// vía custom properties CSS (--mx/--my), solo en paneles reales del DOM
-// (nunca en las cards del muro, que son texturas de canvas: ver dev-xplain
-// 2026-09-30-0347-prensa-spotlight-card-paneles).
-function hexToRgb(hex: string): string {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  if (!m) return '99, 102, 241'
-  return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`
-}
-
-function onSpotlightMove(e: MouseEvent<HTMLElement>) {
-  const rect = e.currentTarget.getBoundingClientRect()
-  e.currentTarget.style.setProperty('--mx', `${(((e.clientX - rect.left) / rect.width) * 100).toFixed(2)}%`)
-  e.currentTarget.style.setProperty('--my', `${(((e.clientY - rect.top) / rect.height) * 100).toFixed(2)}%`)
-}
-
-function onSpotlightLeave(e: MouseEvent<HTMLElement>) {
-  e.currentTarget.style.setProperty('--mx', '50%')
-  e.currentTarget.style.setProperty('--my', '50%')
-}
-
-// Panel de detalle al hacer click en una card con foto (Iteración 4, opción
-// A: la card del muro se queda compacta y sin foto — solo se ve aquí). El
-// footer de comentarios/compartir/guardar de la plantilla original se
-// sustituye por el link real a la noticia (no hay esos datos en la app).
-function NoticiaPanel({ item, onClose }: { item: NewsItem; onClose: () => void }) {
-  return (
-    <div className="contra-backdrop" onClick={onClose}>
-      <div
-        className="noticia-panel spotlight-card"
-        style={{
-          borderColor: item.sourceColor,
-          boxShadow: `0 0 30px -4px ${item.sourceColor}80, 0 30px 60px -20px rgba(0,0,0,.8)`,
-          '--spotlight-rgb': hexToRgb(item.sourceColor),
-        } as CSSProperties}
-        onMouseMove={onSpotlightMove}
-        onMouseLeave={onSpotlightLeave}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="noticia-panel-head">
-          <span className="noticia-panel-name" style={{ color: item.sourceColor }}>
-            {item.source}
-          </span>
-          <button className="contra-panel-close" onClick={onClose} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
-        {item.imagenUrl && <img className="noticia-panel-img" src={item.imagenUrl} alt="" />}
-        <div className="noticia-panel-body">
-          <div className="noticia-panel-title">{item.headline}</div>
-          <div className="noticia-panel-meta">
-            {item.source} · {item.publishedAt}
-          </div>
-          {item.summary && <div className="noticia-panel-excerpt">{item.summary}</div>}
-        </div>
-        {item.enlace && (
-          <a className="noticia-panel-foot" href={item.enlace} target="_blank" rel="noreferrer">
-            ↗ {dominio(item.enlace)} — leer noticia original
-          </a>
-        )}
-      </div>
+      {overlay && <CardOverlay state={overlay} onToggle={toggleOverlayFlip} onClose={closeOverlay} />}
     </div>
   )
 }

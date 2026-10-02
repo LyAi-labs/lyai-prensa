@@ -3,6 +3,8 @@
 // sampleNews.ts se mantiene como fallback si la API no responde (ver
 // WallGL.tsx), así el muro nunca se queda en blanco.
 
+import { decodeEntities } from './decodeEntities'
+
 const API_BASE: string = import.meta.env.VITE_API_BASE ?? '/api'
 
 export type Claim = {
@@ -82,8 +84,8 @@ function mapNoticia(n: ApiNoticia): NewsItem {
     id: n.id,
     source: n.fuente_nombre,
     sourceColor: n.fuente_color,
-    headline: n.titular,
-    summary: n.descripcion,
+    headline: decodeEntities(n.titular),
+    summary: decodeEntities(n.descripcion),
     publishedAt: formatPublishedAt(n.publicada_en),
     enlace: n.enlace,
     imagenUrl: n.imagen_url,

@@ -56,13 +56,12 @@ export function hash(s: string): number {
   return Math.abs(h)
 }
 
-let decoder: HTMLTextAreaElement | null = null
-
-// La ingesta guarda titulares con entidades HTML crudas (&#039;, &amp;…);
-// React las pinta literales, así que se decodifican al mostrar.
-export function decodeEntities(s: string): string {
-  if (!s || !s.includes('&')) return s
-  decoder ??= document.createElement('textarea')
-  decoder.innerHTML = s
-  return decoder.value
+// Clave de «misma historia»: titular normalizado (sin tildes ni signos).
+export function storyKey(headline: string): string {
+  return headline
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
 }

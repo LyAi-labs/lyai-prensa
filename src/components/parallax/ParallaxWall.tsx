@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, useMotionValue, useScroll, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
 import { generateSampleNews, type NewsItem as MockNewsItem } from '../../data/sampleNews'
 import { fetchNoticias, type NewsItem } from '../../data/newsApi'
-import NewsCard from './NewsCard'
+import NewsCard from '../card/NewsCard'
+import { storyKey } from '../card/cardUtils'
 import DateNav from './DateNav'
 import './parallax.css'
 
@@ -100,6 +101,8 @@ export default function ParallaxWall({ onReady }: { onReady?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [exhausted, setExhausted] = useState(false)
   const [flippedId, setFlippedId] = useState<string | null>(null)
+  // «Misma historia»: la card en peek (ratón quieto / dedo mantenido) ilumina las gemelas.
+  const [focusId, setFocusId] = useState<string | null>(null)
 
   const offsetRef = useRef(0)
   const versionRef = useRef(0)
@@ -151,6 +154,7 @@ export default function ParallaxWall({ onReady }: { onReady?: () => void }) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 })
     setFlippedId(null)
+    setFocusId(null)
     void loadMore(true)
   }, [loadMore])
 
@@ -191,8 +195,8 @@ export default function ParallaxWall({ onReady }: { onReady?: () => void }) {
   const mx = useSpring(mouseX, { stiffness: 60, damping: 20 })
   const my = useSpring(mouseY, { stiffness: 60, damping: 20 })
 
-  const rotateY = useTransform([progress, mx], ([p, m]: number[]) => (-24 * (1 - p) + m * 1.6) * amp)
-  const rotateX = useTransform([progress, my], ([p, m]: number[]) => (14 * (1 - p) - m * 1.2) * amp)
+  const rotateY = useTransform([progress, mx], ([p, m]: number[]) => (-24 * (1 - p) + m * 0.8 * p) * amp)
+  const rotateX = useTransform([progress, my], ([p, m]: number[]) => (14 * (1 - p) - m * 0.6 * p) * amp)
   const rotateZ = useTransform(progress, [0, 1], [-4 * amp, 0])
   const scale = useTransform(progress, [0, 1], [1 - 0.16 * amp, 1])
   const vignette = useTransform(progress, [0, 1], [Math.min(1, amp), 0])
@@ -215,6 +219,21 @@ export default function ParallaxWall({ onReady }: { onReady?: () => void }) {
   }, [items, cols])
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
+  const { keyById, countByKey } = useMemo(() => {
+    const keyById = new Map<string, string>()
+    const countByKey = new Map<string, number>()
+    for (const it of items) {
+      const k = storyKey(it.headline)
+      if (!k) continue
+      keyById.set(it.id, k)
+      countByKey.set(k, (countByKey.get(k) ?? 0) + 1)
+    }
+    return { keyById, countByKey }
+  }, [items])
+  const focusKey = focusId ? keyById.get(focusId) : undefined
+  const storyGroup = focusKey && (countByKey.get(focusKey) ?? 0) > 1 ? focusKey : null
+  const onPeekChange = useCallback((id: string, peek: boolean) => setFocusId(peek ? id : null), [])
+
   const toggle = useCallback((id: string) => setFlippedId((cur) => (cur === id ? null : id)), [])
 
   const goToday = () => {
@@ -250,12 +269,22 @@ export default function ParallaxWall({ onReady }: { onReady?: () => void }) {
                 <Column key={ci} idx={ci} progress={progress} velocity={velocity} amp={amp}>
                   {colItems.map((item) => {
                     const contra = item.contradicciones[0]
+                    const storyState = !storyGroup
+                      ? null
+                      : item.id === focusId
+                        ? 'origin'
+                        : keyById.get(item.id) === storyGroup
+                          ? 'same'
+                          : 'dim'
                     return (
                       <NewsCard
                         key={item.id}
                         item={item}
                         flipped={flippedId === item.id}
                         onToggle={toggle}
+                        onPeekChange={onPeekChange}
+                        storyState={storyState}
+                        storyCount={storyState === 'origin' ? countByKey.get(storyGroup!) : undefined}
                         contrarioEnlace={contra ? byId.get(contra.noticiaContrariaId)?.enlace : undefined}
                       />
                     )
