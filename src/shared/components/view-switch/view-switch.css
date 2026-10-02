@@ -1,0 +1,38 @@
+.ls-vs {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ls-vs-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+  font: 600 12px system-ui, sans-serif;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  padding: 7px 14px;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.ls-vs-btn:hover { color: #fff; }
+.ls-vs-btn.is-on { background: rgba(0, 229, 255, 0.16); color: #00e5ff; }
+
+@media (max-width: 640px) {
+  .ls-vs { top: 62px; }
+  .ls-vs-btn { padding: 6px 11px; font-size: 11px; }
+}
