@@ -114,6 +114,18 @@ Rama de trabajo: `claude/resume-session-xLdtE` (origin la tiene al día; en el s
 cambios locales sin commitear que no estaban en el resumen de la sesión anterior (ver lección
 en `/opt/lyai/wiki/pages/lessons/` una vez Claude Code la escriba, o pregunta si no aparece).
 
+
+### ✨ Mejoras de cards en la versión normal (rama `feature/muro-mejoras-normal`, 2026-10-02)
+
+El muro sigue siendo WebGL (`WallGL.tsx`, física intacta). Las cards del canvas **no admiten efectos de
+DOM**, así que peek, giro y spotlight «salen» a **UNA card DOM** (`card/CardOverlay.tsx` + `card/NewsCard.tsx`)
+colocada sobre la card del canvas bajo el cursor/dedo. En escena (Three.js): contradicciones a mayor Z según
+intensidad + halo que late; «misma historia» atenúa el resto (`material.color`) e ilumina las gemelas.
+Gestos: ratón quieto 450 ms o dedo mantenido 350 ms (<10 px) → peek (sticky con el dedo, se cierra tocando fuera);
+click/toque → card girada. `drawCard` rediseñada (opción A «editorial»). Titulares con entidades HTML se decodifican
+en `newsApi.ts`. Quitados: paneles `ContradiccionPanel`/`NoticiaPanel` y el HUD de depuración.
+La galería parallax (`feature/muro-parallax-unfurling`, /v2) solo se diferencia en el muro; comparte `card/`.
+
 ### El muro 3D — NO toques la física del scroll sin que se pida explícitamente
 
 `src/components/WallGL.tsx` (Three.js WebGL puro) es la implementación válida — `App.tsx`

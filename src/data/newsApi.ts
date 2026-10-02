@@ -3,6 +3,8 @@
 // sampleNews.ts se mantiene como fallback si la API no responde (ver
 // WallGL.tsx), así el muro nunca se queda en blanco.
 
+import { decodeEntities } from './decodeEntities'
+
 const API_BASE: string = import.meta.env.VITE_API_BASE ?? '/api'
 
 export type Claim = {
@@ -82,8 +84,8 @@ function mapNoticia(n: ApiNoticia): NewsItem {
     id: n.id,
     source: n.fuente_nombre,
     sourceColor: n.fuente_color,
-    headline: n.titular,
-    summary: n.descripcion,
+    headline: decodeEntities(n.titular),
+    summary: decodeEntities(n.descripcion),
     publishedAt: formatPublishedAt(n.publicada_en),
     enlace: n.enlace,
     imagenUrl: n.imagen_url,
@@ -117,4 +119,13 @@ export async function fetchDiasContradiccion(desde: string, hasta: string): Prom
   if (!res.ok) throw new Error(`API /contradicciones/dias respondió ${res.status}`)
   const data: string[] = await res.json()
   return new Set(data)
+}
+
+// Número de medios (para la pantalla de carga) — se cuenta en vivo en vez de
+// hardcodear una cifra que se queda vieja.
+export async function fetchNumFuentes(): Promise<number> {
+  const res = await fetch(`${API_BASE}/fuentes`)
+  if (!res.ok) throw new Error(`API /fuentes respondió ${res.status}`)
+  const data: unknown[] = await res.json()
+  return data.length
 }
