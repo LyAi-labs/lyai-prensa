@@ -75,6 +75,13 @@ docker-compose build --no-cache prensa && docker-compose up -d --force-recreate 
 es un "first commit" casi vacío, sin relación con lo desplegado. Antes de asumir que "main" es
 la rama de referencia, comprueba `git -C /opt/lyai/app/lyai-prensa log --oneline -1
 claude/resume-session-xLdtE` contra lo que corren los contenedores.
+
+✅ **Actualizado 2026-10-02:** producción (`lyai_prensa`, imagen `lyai-prensa:latest`, build 19:27 UTC) se
+construyó desde **`feature/muro-mejoras-normal`** (cards rediseñadas, peek/giro/misma historia, splash;
+muro WebGL intacto), con «EJECUTA» de Ignacio — la rama `claude/resume-session-xLdtE` ya NO es lo
+desplegado. **Volver atrás** (imagen anterior conservada):
+`docker tag lyai-prensa:pre-parallax-2026-10-02 lyai-prensa:latest && docker-compose up -d --force-recreate --no-deps prensa`
+(sin `--build`; no toca `api`). `/v2/` (rama `feature/muro-parallax-unfurling`) sigue en paralelo.
 <!-- verify: git -C /opt/lyai/app/lyai-prensa rev-parse --verify claude/resume-session-xLdtE -->
 
 ---
