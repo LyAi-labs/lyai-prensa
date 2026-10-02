@@ -34,7 +34,20 @@ TIER 1, historia de `/home/lyai/projects/CLAUDE.md` vs el vigente).
 
 ---
 
-## 🐳 Despliegue — Traefik por labels de Docker (no file provider)
+## 🐳 Despliegue — Traefik por `routes.yml` (provider de FICHERO)
+
+⚠️ **Corregido 2026-10-02:** esta sección decía «por labels de Docker (no file provider)». Es falso:
+`/home/lyai/traefik/config/traefik.yml` solo declara el provider de fichero, así que **las labels de
+`docker-compose.yml` no hacen nada**. El routing de prensa está en `dynamic/routes.yml`
+(`prensa-https` p.50, `prensa-api-https` p.200, `prensa-v2-https` p.100). Detalle y procedimiento en
+AGY.md § «Traefik / nginx». Se descubrió al desplegar `/v2` con labels: Traefik las ignoró.
+
+**Versión experimental en paralelo (2026-10-02):** `docker-compose.parallax.yml` levanta
+`lyai_prensa_parallax` (rama `feature/muro-parallax-unfurling`, build con `VITE_BASE=/v2/`) servido en
+**https://prensa.lyai.es/v2/** sin tocar `prensa` ni `api`. Producción conserva su imagen, además
+etiquetada como `lyai-prensa:pre-parallax-2026-10-02`. Retirar: `docker-compose -p lyai-prensa-parallax
+-f docker-compose.parallax.yml down` (sin `-v`) + quitar `prensa-v2-*` de `routes.yml`
+(copia previa: `routes.yml.bak-pre-prensa-v2-20261002-1837`).
 
 `docker-compose.yml` define dos servicios, ambos en la red externa `traefik_traefik` más
 `lyai_postgres_net` (alias de `lyai-ski_ski_internal`, compartida con la BD de lyai-ski):

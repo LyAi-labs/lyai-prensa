@@ -75,9 +75,13 @@ Dentro de esa carpeta, `routes.yml` es un symlink a `dynamic/routes.yml` (file p
 recarga en caliente — no hace falta reiniciar Traefik al editarlo). Hay ~29 `.bak*` sueltos
 en ese directorio de intentos anteriores; no los edites, no son la config viva.
 
-**lyai-prensa NO usa el file provider.** Se enruta por **labels de Docker** directamente en
-`docker-compose.yml` (provider Docker de Traefik, no el de fichero). Esto es correcto y
-deliberado — es el mismo patrón que usan `dnb-api` y `agents-hub`. Configuración actual:
+⚠️ **Corregido 2026-10-02:** este apartado decía que lyai-prensa se enruta por labels de Docker.
+**Es falso**: `traefik.yml` solo tiene el provider de FICHERO (no hay provider Docker), así que las
+labels de `docker-compose.yml` son decorativas — verificado al desplegar `/v2` con labels: Traefik
+las ignoró y el tráfico siguió cayendo en el router de producción. **El routing real de prensa vive
+en `dynamic/routes.yml`**: routers `prensa-https` (priority 50), `prensa-api-https` (priority 200)
+y, desde 2026-10-02, `prensa-v2-https` (priority 100, `/v2` → contenedor `lyai_prensa_parallax`
+con middleware `prensa-v2-strip`). Configuración equivalente en las labels (informativa):
 
 | Servicio | Dominio/regla | Red | Puerto interno |
 |---|---|---|---|
@@ -91,12 +95,10 @@ deliberado — es el mismo patrón que usan `dnb-api` y `agents-hub`. Configurac
   placeholder — no lo vuelvas a "confirmar", ya está en `docker-compose.yml`.
 - `certresolver: letsencrypt`, entrypoint `websecure`; el challenge ACME lo atiende Traefik
   solo en el entrypoint `web`, no hace falta router HTTP propio.
-- **Si cambias las labels**: `docker compose up -d --build` para que Traefik las relea —
-  esto sí requiere recrear el contenedor, a diferencia del file provider.
-- **Si necesitas tocar el file provider** (`/home/lyai/traefik/config/dynamic/routes.yml`)
-  para algo de prensa (ej. un alias, un middleware compartido), avisa a Claude Code primero
-  — ese fichero es la única fuente de verdad para TODO el routing basado en fichero del
-  server, y un error ahí afecta a otras verticales.
+- **Cambiar el routing de prensa = editar `dynamic/routes.yml`** (recarga en caliente). Copia de
+  seguridad antes (`routes.yml.bak-pre-<motivo>-<fecha>` en `config/`), valida el YAML y sustituye
+  con `mv` desde un fichero temporal FUERA de `dynamic/`. Ese fichero es la única fuente de verdad
+  de TODO el routing del server: un error afecta a otras verticales.
 
 Verificación tras cualquier cambio de routing:
 ```bash

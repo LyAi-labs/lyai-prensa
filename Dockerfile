@@ -6,7 +6,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
 COPY src ./src
-ENV VITE_BASE=/
+ARG VITE_BASE=/
+ENV VITE_BASE=$VITE_BASE
 RUN npm run build
 
 FROM nginx:alpine

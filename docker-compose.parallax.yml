@@ -1,0 +1,39 @@
+# Versión experimental «muro parallax» (rama feature/muro-parallax-unfurling),
+# desplegada EN PARALELO a producción en https://prensa.lyai.es/v2/ — no
+# sustituye ni recrea los servicios `prensa` y `api` de docker-compose.yml.
+#
+# Uso (binario con guion, no el plugin `docker compose`; proyecto aparte para
+# no tocar los contenedores de producción):
+#   docker-compose -p lyai-prensa-parallax -f docker-compose.parallax.yml up -d --build
+# Retirar (SIN -v):
+#   docker-compose -p lyai-prensa-parallax -f docker-compose.parallax.yml down
+#
+# Traefik quita el prefijo /v2 antes de llegar a nginx; el build usa
+# VITE_BASE=/v2/ para que los assets se pidan bajo ese prefijo. La API es la
+# misma de producción (`/api` del mismo origen).
+
+services:
+  prensa_parallax:
+    build:
+      context: .
+      args:
+        VITE_BASE: /v2/
+    image: lyai-prensa-parallax:2026-10-02
+    container_name: lyai_prensa_parallax
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prensa-parallax.rule=Host(`prensa.lyai.es`) && (Path(`/v2`) || PathPrefix(`/v2/`))"
+      - "traefik.http.routers.prensa-parallax.priority=100"
+      - "traefik.http.routers.prensa-parallax.entrypoints=websecure"
+      - "traefik.http.routers.prensa-parallax.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prensa-parallax.middlewares=prensa-parallax-strip"
+      - "traefik.http.middlewares.prensa-parallax-strip.stripprefix.prefixes=/v2"
+      - "traefik.http.services.prensa-parallax.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
+    name: traefik_traefik
