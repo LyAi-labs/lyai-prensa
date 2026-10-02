@@ -1,0 +1,182 @@
+/* Piezas comunes a todas las vistas (muro bento, línea de tiempo): cabecera,
+   leyenda, navegación por fecha y selector de vista. */
+
+.vw-root {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 18%, #1a1d22 0%, #0a0b0d 55%, #000 100%);
+  overflow: hidden;
+  color: #e6eaf0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.vw-header {
+  position: absolute;
+  top: 22px;
+  left: 32px;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.vw-title { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.02em; color: rgba(255, 255, 255, 0.92); }
+.vw-subtitle { margin: 2px 0 0; font-size: 12px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.02em; }
+
+.vw-legend {
+  position: absolute;
+  left: 32px;
+  bottom: 22px;
+  z-index: 30;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 6px 12px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.vw-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff, #ffd166 70%, #b45309);
+  box-shadow: 0 0 8px rgba(255, 209, 102, 0.7);
+}
+
+.vw-dot.is-loading { animation: vw-pulse 1s ease-in-out infinite; }
+@keyframes vw-pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+
+.vw-top-fade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 110px;
+  z-index: 20;
+  pointer-events: none;
+  background: linear-gradient(180deg, #050709 0%, #050709 40%, rgba(5, 7, 9, 0.85) 62%, rgba(5, 7, 9, 0) 100%);
+}
+
+/* ── Selector de vista ───────────────────────────────────────────────────── */
+
+.vs-switch {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.vs-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+  font: 600 12px system-ui, sans-serif;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  padding: 7px 14px;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.vs-btn:hover { color: #fff; }
+.vs-btn.is-on { background: rgba(0, 229, 255, 0.16); color: #00e5ff; }
+
+/* ── Navegación por fecha (Hoy + calendario) ─────────────────────────────── */
+
+.pw-date-nav {
+  position: absolute;
+  top: 20px;
+  right: 28px;
+  z-index: 40;
+  display: flex;
+  gap: 8px;
+}
+
+.pw-date-btn {
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pw-date-btn:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.25); }
+.pw-date-btn-today { color: #00e5ff; background: rgba(0, 229, 255, 0.1); border-color: rgba(0, 229, 255, 0.3); }
+.pw-date-btn-cal { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 50%; }
+
+.pw-calendar {
+  position: absolute;
+  top: 42px;
+  right: 0;
+  width: 240px;
+  background: #0b0d12;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 25px 60px -20px rgba(0, 0, 0, 0.8);
+  padding: 12px;
+  color: #e6eaf0;
+}
+
+.pw-calendar-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.pw-calendar-head button { background: transparent; border: none; color: rgba(255, 255, 255, 0.55); font-size: 14px; cursor: pointer; padding: 2px 6px; }
+.pw-calendar-head button:hover { color: rgba(255, 255, 255, 0.9); }
+.pw-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.pw-calendar-dow { margin-bottom: 4px; }
+.pw-calendar-dow span { font-size: 9px; color: rgba(255, 255, 255, 0.35); text-align: center; }
+
+.pw-calendar-day {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pw-calendar-day:hover { background: rgba(255, 255, 255, 0.08); }
+.pw-calendar-day.is-today { border-color: rgba(0, 229, 255, 0.4); color: #00e5ff; }
+.pw-calendar-day.has-contra { background: rgba(239, 68, 68, 0.14); color: #f87171; border-color: rgba(239, 68, 68, 0.35); }
+.pw-calendar-day.is-selected { background: #00e5ff; border-color: #00e5ff; color: #0b0d12; font-weight: 700; }
+.pw-calendar-foot { margin-top: 8px; text-align: right; }
+.pw-calendar-foot button { background: transparent; border: none; color: rgba(255, 255, 255, 0.45); font-size: 11px; cursor: pointer; }
+.pw-calendar-foot button:hover { color: rgba(255, 255, 255, 0.8); }
+
+
+@media (max-width: 640px) {
+  .vw-header { left: 16px; top: 16px; }
+  .vw-subtitle { display: none; }
+  .vw-legend { left: 12px; bottom: 14px; }
+  .pw-date-nav { right: 14px; top: 14px; }
+  .vs-switch { top: 62px; }
+  .vs-btn { padding: 6px 11px; font-size: 11px; }
+}

@@ -13,10 +13,11 @@ export type OverlayState = {
   sticky: boolean // abierta con el dedo: se cierra tocando fuera
   storyCount: number
   contrarioEnlace?: string
+  related?: NewsItem[]
 }
 
 const CARD_W = 300
-const HALF_H = 220 // alto medio estimado, solo para no salirse de pantalla
+const HALF_H = 230 // alto medio estimado, solo para no salirse de pantalla
 const MARGIN = 12
 const GRACE_MS = 140
 const FIRST_GRACE_MS = 800
@@ -98,6 +99,7 @@ export default function CardOverlay({
           contrarioEnlace={state.contrarioEnlace}
           peek
           storyCount={state.storyCount}
+          related={state.related}
         />
       </div>
     </div>
