@@ -66,6 +66,18 @@ claude/resume-session-xLdtE` contra lo que corren los contenedores.
 
 ---
 
+
+## 🧪 Rama experimental `feature/muro-parallax-unfurling` (2026-10-02, sin desplegar)
+
+En esa rama `App.tsx` monta `src/components/parallax/` (galería DOM inclinada en 3D con parallax
+por columnas, inspirada en «3d-parallax-unfurling-gallery» de 21st.dev) + `Splash.tsx` en vez de
+`WallGL.tsx`. `WallGL.tsx` y su física **siguen intactos en el repo** como vuelta atrás; en `main`/la
+rama de producción nada cambia. Cards con spotlight al hover y giro (flip) al click; contradicciones
+con borde/glow rojo. Lección: el `transform-origin` del plano 3D debe anclarse al viewport (el plano
+mide decenas de miles de px con la carga infinita) o cualquier giro mínimo deforma la rejilla.
+
+---
+
 ## 🧠 Pipeline de contradicciones — stack 100% gratuito (reescrito 2026-09-29)
 
 `extract_claims.py` → `embed_claims.py` → `judge_contradictions.py`. Antes usaba Claude

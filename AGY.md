@@ -114,6 +114,16 @@ Rama de trabajo: `claude/resume-session-xLdtE` (origin la tiene al día; en el s
 cambios locales sin commitear que no estaban en el resumen de la sesión anterior (ver lección
 en `/opt/lyai/wiki/pages/lessons/` una vez Claude Code la escriba, o pregunta si no aparece).
 
+
+### 🧪 Rama experimental `feature/muro-parallax-unfurling` (2026-10-02, sin desplegar)
+
+En esa rama `App.tsx` monta `src/components/parallax/` (galería DOM inclinada en 3D con parallax
+por columnas, inspirada en «3d-parallax-unfurling-gallery» de 21st.dev) + `Splash.tsx` en vez de
+`WallGL.tsx`. `WallGL.tsx` y su física **siguen intactos en el repo** como vuelta atrás; en `main`/la
+rama de producción nada cambia. Cards con spotlight al hover y giro (flip) al click; contradicciones
+con borde/glow rojo. Lección: el `transform-origin` del plano 3D debe anclarse al viewport (el plano
+mide decenas de miles de px con la carga infinita) o cualquier giro mínimo deforma la rejilla.
+
 ### El muro 3D — NO toques la física del scroll sin que se pida explícitamente
 
 `src/components/WallGL.tsx` (Three.js WebGL puro) es la implementación válida — `App.tsx`

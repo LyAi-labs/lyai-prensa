@@ -118,3 +118,12 @@ export async function fetchDiasContradiccion(desde: string, hasta: string): Prom
   const data: string[] = await res.json()
   return new Set(data)
 }
+
+// Número de medios (para la pantalla de carga) — se cuenta en vivo en vez de
+// hardcodear una cifra que se queda vieja.
+export async function fetchNumFuentes(): Promise<number> {
+  const res = await fetch(`${API_BASE}/fuentes`)
+  if (!res.ok) throw new Error(`API /fuentes respondió ${res.status}`)
+  const data: unknown[] = await res.json()
+  return data.length
+}
