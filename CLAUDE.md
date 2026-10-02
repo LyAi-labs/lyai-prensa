@@ -87,7 +87,7 @@ desplegado. **Volver atrás** (imagen anterior conservada):
 ---
 
 
-## 🧪 Rama experimental `feature/muro-parallax-unfurling` (2026-10-02, sin desplegar)
+## 🧪 Rama `feature/muro-parallax-unfurling` (2026-10-02) — ⚠️ SUSTITUIDA por `feature/muro-v2-bento` (ver «Vistas y ramas»)
 
 En esa rama `App.tsx` monta `src/components/parallax/` (galería DOM inclinada en 3D con parallax
 por columnas, inspirada en «3d-parallax-unfurling-gallery» de 21st.dev) + `Splash.tsx` en vez de
@@ -122,6 +122,19 @@ La galería parallax (`feature/muro-parallax-unfurling`, /v2) solo se diferencia
   **Si se toca algo compartido, aplicarlo en las dos ramas** (`git checkout <otra> -- <ruta>`).
 - La línea de tiempo y el bento agrupan titulares idénticos en una pieza (`views/stories.ts`); el detalle muestra
   «También lo cuentan» con los demás medios.
+
+---
+
+## 🧩 Componentes compartidos (`src/shared/`) y veto — 2026-10-02
+
+- `src/shared/` es **copia sincronizada de `/opt/lyai/app/lyai-shared`** (flip-card, anchored-overlay, view-switch, splash-screen,
+  timeline, drag-bento, use-dwell, use-spotlight). **No se edita aquí**: se cambia en `lyai-shared` y
+  `/opt/lyai/app/lyai-shared/bin/lyai-shared-sync . --update` (en las DOS ramas: normal y v2). Estado: `lyai-shared-sync . --check`.
+- En prensa queda solo el contenido y el dominio: `card/NewsCard` (sobre FlipCard), `card/CardOverlay` (sobre AnchoredOverlay),
+  `card/Splash` (sobre SplashScreen), `views/TimelineView` (sobre Timeline), `bento/BentoWall` (v2, sobre DragBento).
+- **Antes de `git push`/deploy: `cat /opt/lyai/state/aurelius-veto.json`**; si `"active": true`, avisar a Ignacio (regla transversal).
+- Mapa de la empresa: `/opt/lyai/wiki/pages/mapa-empresa-lyai.md`.
+  <!-- verify: test -f /opt/lyai/app/lyai-prensa/src/shared/lyai-shared.manifest.json -->
 
 ---
 
