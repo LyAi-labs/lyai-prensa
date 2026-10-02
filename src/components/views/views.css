@@ -1,6 +1,7 @@
-/* ── Muro parallax (rejilla DOM inclinada en 3D que se despliega al scroll) ── */
+/* Piezas comunes a todas las vistas (muro bento, línea de tiempo): cabecera,
+   leyenda, navegación por fecha y selector de vista. */
 
-.pw-root {
+.vw-root {
   position: fixed;
   inset: 0;
   background: radial-gradient(ellipse at 50% 18%, #1a1d22 0%, #0a0b0d 55%, #000 100%);
@@ -9,59 +10,7 @@
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-.pw-scroll {
-  position: absolute;
-  inset: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-  overscroll-behavior: contain;
-}
-
-.pw-stage {
-  padding: 120px 4vw 180px;
-}
-
-.pw-plane {
-  will-change: transform;
-}
-
-.pw-cols {
-  display: flex;
-  align-items: flex-start;
-  gap: 22px;
-}
-
-.pw-col {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  will-change: transform;
-}
-
-.pw-vignette {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.55) 22%, transparent 50%);
-}
-
-.pw-top-fade {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 130px;
-  z-index: 20;
-  pointer-events: none;
-  background: linear-gradient(180deg, #050709 0%, #050709 42%, rgba(5, 7, 9, 0.85) 62%, rgba(5, 7, 9, 0) 100%);
-}
-
-.pw-header {
+.vw-header {
   position: absolute;
   top: 22px;
   left: 32px;
@@ -69,22 +18,10 @@
   pointer-events: none;
 }
 
-.pw-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.92);
-}
+.vw-title { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.02em; color: rgba(255, 255, 255, 0.92); }
+.vw-subtitle { margin: 2px 0 0; font-size: 12px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.02em; }
 
-.pw-subtitle {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: 0.02em;
-}
-
-.pw-legend {
+.vw-legend {
   position: absolute;
   left: 32px;
   bottom: 22px;
@@ -103,7 +40,7 @@
   -webkit-backdrop-filter: blur(8px);
 }
 
-.pw-legend-dot {
+.vw-dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -111,56 +48,55 @@
   box-shadow: 0 0 8px rgba(255, 209, 102, 0.7);
 }
 
-.pw-legend-dot.is-loading {
-  animation: pw-pulse 1s ease-in-out infinite;
+.vw-dot.is-loading { animation: vw-pulse 1s ease-in-out infinite; }
+@keyframes vw-pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+
+.vw-top-fade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 110px;
+  z-index: 20;
+  pointer-events: none;
+  background: linear-gradient(180deg, #050709 0%, #050709 40%, rgba(5, 7, 9, 0.85) 62%, rgba(5, 7, 9, 0) 100%);
 }
 
-@keyframes pw-pulse {
-  50% { opacity: 0.35; transform: scale(0.8); }
+/* ── Selector de vista ───────────────────────────────────────────────────── */
+
+.vs-switch {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-.pw-empty,
-.pw-end {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.vs-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+  font: 600 12px system-ui, sans-serif;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  padding: 7px 14px;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
-.pw-empty { padding: 30vh 0; font-size: 14px; }
-.pw-end { padding: 0 0 60px; margin-top: -90px; position: relative; z-index: 5; }
-
-/* ── Contradicciones: salen del plano (eje Z) más cuanto más intensas ──────── */
-
-.pw-plane,
-.pw-cols,
-.pw-col,
-.pw-col .pc {
-  transform-style: preserve-3d;
-}
-
-.pw-col .pc {
-  transition: opacity 0.3s ease, filter 0.3s ease, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.pw-col .pc-has-contra { transform: translateZ(var(--pop, 60px)); }
-.pw-col .pc.is-peek { transform: translateZ(50px); }
-.pw-col .pc-has-contra.is-peek { transform: translateZ(calc(var(--pop, 60px) + 24px)); }
-
-@keyframes pc-pulse {
-  50% {
-    box-shadow: 0 0 46px -2px rgba(var(--c-rgb), 0.85), 0 22px 44px -20px rgba(0, 0, 0, 0.95);
-  }
-}
-
-.pw-col .pc-has-contra .pc-face { animation: pc-pulse 2.6s ease-in-out infinite; }
-
-@media (prefers-reduced-motion: reduce) {
-  .pw-col .pc-has-contra,
-  .pw-col .pc.is-peek { transform: none; }
-  .pw-col .pc-has-contra .pc-face { animation: none; }
-}
+.vs-btn:hover { color: #fff; }
+.vs-btn.is-on { background: rgba(0, 229, 255, 0.16); color: #00e5ff; }
 
 /* ── Navegación por fecha (Hoy + calendario) ─────────────────────────────── */
 
@@ -235,22 +171,12 @@
 .pw-calendar-foot button { background: transparent; border: none; color: rgba(255, 255, 255, 0.45); font-size: 11px; cursor: pointer; }
 .pw-calendar-foot button:hover { color: rgba(255, 255, 255, 0.8); }
 
-/* ── Móvil ───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
-  .pw-stage { padding: 96px 12px 140px; }
-  .pw-cols, .pw-col { gap: 12px; }
-  .pw-header { left: 16px; top: 16px; }
-  .pw-subtitle { display: none; }
+  .vw-header { left: 16px; top: 16px; }
+  .vw-subtitle { display: none; }
+  .vw-legend { left: 12px; bottom: 14px; }
   .pw-date-nav { right: 14px; top: 14px; }
-  .pw-legend { left: 12px; bottom: 14px; }
-  .pc-title { font-size: 14px; }
-  .pc-sum { display: none; }
-  .pc-front { min-height: 250px; }
-  .pc-banner { height: 96px !important; }
-  .pc-contra-bar { font-size: 9.5px; }
-  .pc-go,
-  .pc-photo-tag { display: none; }
-  .pc-meta small { white-space: nowrap; }
-  .pc-foot { padding: 8px 12px 10px; }
+  .vs-switch { top: 62px; }
+  .vs-btn { padding: 6px 11px; font-size: 11px; }
 }

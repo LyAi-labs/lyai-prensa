@@ -23,9 +23,11 @@ type Props = {
   storyCount?: number
   // Rejilla DOM: estado de la card cuando otra está en «misma historia».
   storyState?: 'origin' | 'same' | 'dim' | null
+  // Otros medios que cuentan la misma historia (se listan en el reverso).
+  related?: NewsItem[]
 }
 
-function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, onPeekChange, storyCount, storyState }: Props) {
+function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, onPeekChange, storyCount, storyState, related }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
   const [peekInternal, setPeekInternal] = useState(false)
@@ -81,6 +83,34 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
     e.preventDefault()
     onToggle(item.id)
   }
+
+  const backPhoto = hasPhoto ? (
+    <img className="pc-back-photo" src={item.imagenUrl!} alt="" referrerPolicy="no-referrer" draggable={false} />
+  ) : null
+
+  const others = related?.filter((r) => r.id !== item.id) ?? []
+  const relatedList =
+    others.length > 0 ? (
+      <div className="pc-related">
+        <span className="pc-related-title">También lo cuentan · {others.length}</span>
+        <div className="pc-related-list">
+          {others.slice(0, 10).map((r) => (
+            <a
+              key={r.id}
+              className="pc-rel"
+              href={r.enlace || undefined}
+              target="_blank"
+              rel="noreferrer"
+              style={{ ['--c' as string]: r.sourceColor }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <i />
+              {r.source}
+            </a>
+          ))}
+        </div>
+      </div>
+    ) : null
 
   const style = {
     '--c': item.sourceColor,
@@ -191,6 +221,7 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
           <div className="pc-face pc-back" aria-hidden={!flipped}>
             {contra ? (
               <div className="pc-back-scroll">
+                {backPhoto}
                 <div className="pc-hl-icon" style={{ background: `linear-gradient(135deg, ${cColor}, ${cColor}99)` }}>
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
@@ -235,9 +266,11 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
                     </a>
                   )}
                 </div>
+                {relatedList}
               </div>
             ) : (
               <div className="pc-back-scroll">
+                {backPhoto}
                 <div className="pc-back-head">
                   <span className="pc-avatar" aria-hidden="true">{ini}</span>
                   <span className="pc-meta">
@@ -252,6 +285,7 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
                     ↗ {dominio(item.enlace)} — leer noticia original
                   </a>
                 )}
+                {relatedList}
               </div>
             )}
             <span className="pc-back-hint">click para volver</span>

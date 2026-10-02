@@ -1,16 +1,30 @@
 import { useCallback, useState } from 'react'
-import ParallaxWall from './components/parallax/ParallaxWall'
+import BentoWall from './components/bento/BentoWall'
 import Splash from './components/card/Splash'
+import TimelineView from './components/views/TimelineView'
+import ViewSwitch from './components/views/ViewSwitch'
+import { useView } from './components/views/useView'
 
-// Rama feature/muro-parallax-unfurling = versión normal + muro parallax.
-// Las cards, el splash y los gestos son los compartidos de components/card/;
-// lo único distinto es el muro (galería DOM inclinada en 3D en vez de WebGL).
+// v2 = versión normal + muro bento horizontal (en vez del muro WebGL). Las
+// cards, el splash y los gestos son los compartidos de components/card/; la
+// línea de tiempo (components/views/) es la vista alternativa.
+type View = 'muro' | 'tiempo'
+
 export default function App() {
   const [ready, setReady] = useState(false)
   const onReady = useCallback(() => setReady(true), [])
+  const [view, setView] = useView<View>('muro')
   return (
     <>
-      <ParallaxWall onReady={onReady} />
+      {view === 'muro' ? <BentoWall key="muro" onReady={onReady} /> : <TimelineView key="tiempo" onReady={onReady} />}
+      <ViewSwitch
+        value={view}
+        onChange={setView}
+        options={[
+          { id: 'muro', label: 'Muro', icon: 'grid' },
+          { id: 'tiempo', label: 'Línea de tiempo', icon: 'timeline' },
+        ]}
+      />
       <Splash ready={ready} />
     </>
   )
