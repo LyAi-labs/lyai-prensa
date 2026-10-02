@@ -11,6 +11,10 @@
 # Traefik quita el prefijo /v2 antes de llegar a nginx; el build usa
 # VITE_BASE=/v2/ para que los assets se pidan bajo ese prefijo. La API es la
 # misma de producción (`/api` del mismo origen).
+#
+# ⚠️ Las labels de abajo son INFORMATIVAS: Traefik de este server solo usa el
+# provider de fichero. El routing real está en
+# /home/lyai/traefik/config/dynamic/routes.yml (`prensa-v2-https`).
 
 services:
   prensa_parallax:
