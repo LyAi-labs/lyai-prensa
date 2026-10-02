@@ -34,7 +34,20 @@ TIER 1, historia de `/home/lyai/projects/CLAUDE.md` vs el vigente).
 
 ---
 
-## 🐳 Despliegue — Traefik por labels de Docker (no file provider)
+## 🐳 Despliegue — Traefik por `routes.yml` (provider de FICHERO)
+
+⚠️ **Corregido 2026-10-02:** esta sección decía «por labels de Docker (no file provider)». Es falso:
+`/home/lyai/traefik/config/traefik.yml` solo declara el provider de fichero, así que **las labels de
+`docker-compose.yml` no hacen nada**. El routing de prensa está en `dynamic/routes.yml`
+(`prensa-https` p.50, `prensa-api-https` p.200, `prensa-v2-https` p.100). Detalle y procedimiento en
+AGY.md § «Traefik / nginx». Se descubrió al desplegar `/v2` con labels: Traefik las ignoró.
+
+**Versión experimental en paralelo (2026-10-02):** `docker-compose.parallax.yml` levanta
+`lyai_prensa_parallax` (rama `feature/muro-parallax-unfurling`, build con `VITE_BASE=/v2/`) servido en
+**https://prensa.lyai.es/v2/** sin tocar `prensa` ni `api`. Producción conserva su imagen, además
+etiquetada como `lyai-prensa:pre-parallax-2026-10-02`. Retirar: `docker-compose -p lyai-prensa-parallax
+-f docker-compose.parallax.yml down` (sin `-v`) + quitar `prensa-v2-*` de `routes.yml`
+(copia previa: `routes.yml.bak-pre-prensa-v2-20261002-1837`).
 
 `docker-compose.yml` define dos servicios, ambos en la red externa `traefik_traefik` más
 `lyai_postgres_net` (alias de `lyai-ski_ski_internal`, compartida con la BD de lyai-ski):
@@ -62,10 +75,26 @@ docker-compose build --no-cache prensa && docker-compose up -d --force-recreate 
 es un "first commit" casi vacío, sin relación con lo desplegado. Antes de asumir que "main" es
 la rama de referencia, comprueba `git -C /opt/lyai/app/lyai-prensa log --oneline -1
 claude/resume-session-xLdtE` contra lo que corren los contenedores.
+
+✅ **Actualizado 2026-10-02:** producción (`lyai_prensa`, imagen `lyai-prensa:latest`, build 19:27 UTC) se
+construyó desde **`feature/muro-mejoras-normal`** (cards rediseñadas, peek/giro/misma historia, splash;
+muro WebGL intacto), con «EJECUTA» de Ignacio — la rama `claude/resume-session-xLdtE` ya NO es lo
+desplegado. **Volver atrás** (imagen anterior conservada):
+`docker tag lyai-prensa:pre-parallax-2026-10-02 lyai-prensa:latest && docker-compose up -d --force-recreate --no-deps prensa`
+(sin `--build`; no toca `api`). `/v2/` (rama `feature/muro-parallax-unfurling`) sigue en paralelo.
 <!-- verify: git -C /opt/lyai/app/lyai-prensa rev-parse --verify claude/resume-session-xLdtE -->
 
 ---
 
+
+## 🧪 Rama experimental `feature/muro-parallax-unfurling` (2026-10-02, sin desplegar)
+
+En esa rama `App.tsx` monta `src/components/parallax/` (galería DOM inclinada en 3D con parallax
+por columnas, inspirada en «3d-parallax-unfurling-gallery» de 21st.dev) + `Splash.tsx` en vez de
+`WallGL.tsx`. `WallGL.tsx` y su física **siguen intactos en el repo** como vuelta atrás; en `main`/la
+rama de producción nada cambia. Cards con spotlight al hover y giro (flip) al click; contradicciones
+con borde/glow rojo. Lección: el `transform-origin` del plano 3D debe anclarse al viewport (el plano
+mide decenas de miles de px con la carga infinita) o cualquier giro mínimo deforma la rejilla.
 
 ## ✨ Mejoras de cards en la versión normal (rama `feature/muro-mejoras-normal`, 2026-10-02)
 
