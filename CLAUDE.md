@@ -109,6 +109,22 @@ La galería parallax (`feature/muro-parallax-unfurling`, /v2) solo se diferencia
 
 ---
 
+
+## 🗂️ Vistas y ramas (actualizado 2026-10-02 noche)
+
+- **Versión normal** (`feature/muro-mejoras-normal`, la base de producción): muro 3D WebGL como vista
+  **predeterminada** + **línea de tiempo como opción** (selector arriba al centro, `components/views/`).
+  La opción NO se recuerda entre visitas: siempre se entra por el muro.
+- **v2** (`feature/muro-v2-bento`, desplegada en `/v2/`): igual, pero el muro es un **bento horizontal** que se
+  arrastra (`components/bento/`, referencia «bento-gallery» de 21st.dev) en vez del WebGL. La galería parallax
+  anterior sigue en `feature/muro-parallax-unfurling` (sin uso).
+- Comparten `components/card/` (card DOM, overlay, peek, giro, splash), `components/views/` y `data/useNewsFeed.ts`.
+  **Si se toca algo compartido, aplicarlo en las dos ramas** (`git checkout <otra> -- <ruta>`).
+- La línea de tiempo y el bento agrupan titulares idénticos en una pieza (`views/stories.ts`); el detalle muestra
+  «También lo cuentan» con los demás medios.
+
+---
+
 ## 🧠 Pipeline de contradicciones — stack 100% gratuito (reescrito 2026-09-29)
 
 `extract_claims.py` → `embed_claims.py` → `judge_contradictions.py`. Antes usaba Claude
