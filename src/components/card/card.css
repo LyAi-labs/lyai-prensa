@@ -542,6 +542,25 @@
   .pc-title { font-size: 14.5px; }
 }
 
+/* ── Una sola cara visible a la vez ──────────────────────────────────────────
+   No se fía de backface-visibility: algunos motores la ignoran si aplanan el
+   3D (entonces se veían las dos caras superpuestas, una en espejo). La cara
+   que sale se oculta a mitad del giro (0,3 s de 0,6 s). */
+
+.pc-front,
+.pc-back {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, visibility 0s linear 0.3s;
+}
+
+.pc-back { visibility: hidden; }
+.pc.is-flipped .pc-front { visibility: hidden; }
+.pc.is-flipped .pc-back { visibility: visible; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-front,
+  .pc-back { transition-delay: 0s; }
+}
+
 /* ── Pantalla de carga ───────────────────────────────────────────────────── */
 
 .pw-splash {
