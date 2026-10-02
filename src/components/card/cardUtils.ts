@@ -55,3 +55,13 @@ export function hash(s: string): number {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
   return Math.abs(h)
 }
+
+// Clave de «misma historia»: titular normalizado (sin tildes ni signos).
+export function storyKey(headline: string): string {
+  return headline
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}

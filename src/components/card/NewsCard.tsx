@@ -21,9 +21,11 @@ type Props = {
   onPeekChange?: (peek: boolean) => void
   // Etiqueta «× N medios cuentan esto» sobre la card (misma historia).
   storyCount?: number
+  // Rejilla DOM: estado de la card cuando otra está en «misma historia».
+  storyState?: 'origin' | 'same' | 'dim' | null
 }
 
-function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, onPeekChange, storyCount }: Props) {
+function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, onPeekChange, storyCount, storyState }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
   const [peekInternal, setPeekInternal] = useState(false)
@@ -86,12 +88,14 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
     '--c-text': legible(item.sourceColor),
     '--contra': cColor ?? 'transparent',
     '--banner-h': `${bannerH}px`,
+    // Profundidad con la que sale del plano en la rejilla 3D (más intensidad, más Z).
+    '--pop': `${Math.round(40 + (contra?.intensidad ?? 0) * 70)}px`,
   } as CSSProperties
 
   return (
     <div
       ref={rootRef}
-      className={`pc${contra ? ' pc-has-contra' : ''}${flipped ? ' is-flipped' : ''}${peek ? ' is-peek' : ''}`}
+      className={`pc${contra ? ' pc-has-contra' : ''}${flipped ? ' is-flipped' : ''}${peek ? ' is-peek' : ''}${storyState ? ` is-${storyState}` : ''}`}
       style={style}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
@@ -150,6 +154,8 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
                 </svg>
               </span>
             </div>
+
+            {storyState === 'same' && <span className="pc-same-chip">misma historia</span>}
 
             {contra && (
               <div className="pc-contra-bar">

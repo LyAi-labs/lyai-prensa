@@ -468,6 +468,26 @@
   pointer-events: none;
 }
 
+.pc.is-dim { opacity: 0.28; filter: saturate(0.35); }
+.pc.is-same .pc-face { border-color: #00e5ff; box-shadow: 0 0 26px -6px rgba(0, 229, 255, 0.7), 0 18px 40px -22px rgba(0, 0, 0, 0.9); }
+.pc.is-origin { z-index: 6; }
+.pc { transition: opacity 0.3s ease, filter 0.3s ease; }
+
+.pc-same-chip {
+  position: absolute;
+  z-index: 5;
+  right: 10px;
+  top: calc(var(--banner-h, 112px) + 8px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 229, 255, 0.18);
+  border: 1px solid rgba(0, 229, 255, 0.5);
+  color: #7df3ff;
+  font: 700 9.5px system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* ── Overlay del muro WebGL: UNA card DOM sobre la card del canvas ───────── */
 
 .cardov {

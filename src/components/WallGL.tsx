@@ -4,7 +4,7 @@ import gsap from 'gsap'
 import { generateSampleNews, type NewsItem as MockNewsItem } from '../data/sampleNews'
 import { fetchDiasContradiccion, fetchNoticias, type NewsItem } from '../data/newsApi'
 import CardOverlay, { type OverlayState } from './card/CardOverlay'
-import { contraColor, fechaCorta, iniciales, legible } from './card/cardUtils'
+import { contraColor, fechaCorta, iniciales, legible, storyKey } from './card/cardUtils'
 import './Wall.css'
 
 const ROWS = 3
@@ -228,16 +228,6 @@ function makeHaloTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
   return tex
-}
-
-// Clave de «misma historia»: titular normalizado (sin tildes ni signos).
-function storyKey(headline: string): string {
-  return headline
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
 }
 
 function drawFloorArrow(label: string, isRight: boolean): HTMLCanvasElement {
