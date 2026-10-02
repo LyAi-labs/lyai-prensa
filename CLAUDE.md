@@ -43,11 +43,19 @@ TIER 1, historia de `/home/lyai/projects/CLAUDE.md` vs el vigente).
 AGY.md § «Traefik / nginx». Se descubrió al desplegar `/v2` con labels: Traefik las ignoró.
 
 **Versión experimental en paralelo (2026-10-02):** `docker-compose.parallax.yml` levanta
-`lyai_prensa_parallax` (rama `feature/muro-parallax-unfurling`, build con `VITE_BASE=/v2/`) servido en
-**https://prensa.lyai.es/v2/** sin tocar `prensa` ni `api`. Producción conserva su imagen, además
-etiquetada como `lyai-prensa:pre-parallax-2026-10-02`. Retirar: `docker-compose -p lyai-prensa-parallax
--f docker-compose.parallax.yml down` (sin `-v`) + quitar `prensa-v2-*` de `routes.yml`
-(copia previa: `routes.yml.bak-pre-prensa-v2-20261002-1837`).
+`lyai_prensa_parallax` (rama `feature/muro-v2-bento` hoy; el fichero sigue citando
+`feature/muro-parallax-unfurling` porque no se ha tocado desde que esa rama fue sustituida — ver
+«Vistas y ramas» más abajo) servido en **https://prensa.lyai.es/v2/** sin tocar `prensa` ni `api`.
+Producción conserva su imagen, además etiquetada como `lyai-prensa:pre-parallax-2026-10-02`. Retirar:
+`docker-compose -p lyai-prensa-parallax -f docker-compose.parallax.yml down` (sin `-v`) + quitar
+`prensa-v2-*` de `routes.yml` (copia previa: `routes.yml.bak-pre-prensa-v2-20261002-1837`).
+
+**Segunda versión experimental en paralelo (2026-10-02 noche):** `docker-compose.parallax3.yml` levanta
+`lyai_prensa_parallax3` (rama `feature/muro-v3-parallax-original`, `VITE_BASE=/v3/`) en
+**https://prensa.lyai.es/v3/**, mismo patrón que `/v2`, sin tocar `prensa`/`api`/`prensa_parallax`.
+Retirar: `docker-compose -p lyai-prensa-parallax3 -f docker-compose.parallax3.yml down` (sin `-v`) +
+quitar `prensa-v3-*` de `routes.yml` (copia previa: `routes.yml.bak-pre-prensa-v3-20261002-2327`).
+Detalle de la vista → «Vistas y ramas» más abajo.
 
 `docker-compose.yml` define dos servicios, ambos en la red externa `traefik_traefik` más
 `lyai_postgres_net` (alias de `lyai-ski_ski_internal`, compartida con la BD de lyai-ski):
@@ -118,10 +126,23 @@ La galería parallax (`feature/muro-parallax-unfurling`, /v2) solo se diferencia
 - **v2** (`feature/muro-v2-bento`, desplegada en `/v2/`): igual, pero el muro es un **bento horizontal** que se
   arrastra (`components/bento/`, referencia «bento-gallery» de 21st.dev) en vez del WebGL. La galería parallax
   anterior sigue en `feature/muro-parallax-unfurling` (sin uso).
+- **v3** (`feature/muro-v3-parallax-original`, desplegada en `/v3/`, 2026-10-02 noche): añade una **tercera**
+  pestaña «Parallax» (`components/parallax3/ParallaxGallery.tsx`) junto a Muro y Línea de tiempo — **nunca
+  predeterminada**. Adapta el componente *3d-parallax-unfurling-gallery* de 21st.dev tal como se archivó en
+  `Componentes/lyai-components/components/marketing/3d-parallax-unfurling-gallery/` (código + prompt original,
+  sin usar en producción): mismo mecanismo de scroll con **framer-motion** (`useScroll`/`useTransform`/
+  `useSpring`, banner que se expande 0→15% del scroll y rejilla 3D que se endereza + parallax por columna
+  15→100%), pero las 4 columnas se rellenan con `useNewsFeed` (noticias reales) en vez de `UNSPLASH_IMAGES`.
+  Reutiliza `CardOverlay`/`NewsCard`, `DateNav` y `views/stories.ts` — no toca `WallGL.tsx` ni `BentoWall.tsx`.
+  Precedida por dev-xplain verificado (`2026-10-02-2315-muro-v3-parallax-21st-original`), aplicada y
+  desplegada con "aplica"/"EJECUTA" explícitos de Ignacio. Infra: `docker-compose.parallax3.yml` (contenedor
+  `lyai_prensa_parallax3`) + `routes.yml` (`prensa-v3-https`/`-strip`/`-svc`, calcados de los de `/v2`).
+  Retirar: `docker-compose -p lyai-prensa-parallax3 -f docker-compose.parallax3.yml down` (sin `-v`) + quitar
+  las 3 entradas `prensa-v3-*` de `routes.yml` (backup previo: `routes.yml.bak-pre-prensa-v3-20261002-2327`).
 - Comparten `components/card/` (card DOM, overlay, peek, giro, splash), `components/views/` y `data/useNewsFeed.ts`.
-  **Si se toca algo compartido, aplicarlo en las dos ramas** (`git checkout <otra> -- <ruta>`).
-- La línea de tiempo y el bento agrupan titulares idénticos en una pieza (`views/stories.ts`); el detalle muestra
-  «También lo cuentan» con los demás medios.
+  **Si se toca algo compartido, aplicarlo en las ramas que lo usen** (`git checkout <otra> -- <ruta>`).
+- La línea de tiempo, el bento y el parallax agrupan titulares idénticos en una pieza (`views/stories.ts`); el
+  detalle muestra «También lo cuentan» con los demás medios.
 
 ---
 
