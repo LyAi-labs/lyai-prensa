@@ -1,19 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as RPointerEvent } from 'react'
+import { useCallback, useMemo, useState, type MouseEvent } from 'react'
 import { useNewsFeed } from '../../data/useNewsFeed'
 import CardOverlay, { type OverlayState } from '../card/CardOverlay'
 import { contraColor, fechaCorta, hexToRgb, iniciales } from '../card/cardUtils'
 import DateNav from '../views/DateNav'
 import { buildStoryNodes, type StoryNode } from '../views/stories'
+import { BentoTile, DragBento, type BentoSpan } from '../../shared/components/drag-bento'
 import '../views/views.css'
 import './bento.css'
-
-type Span = 'big' | 'tall' | 'wide' | 'sm'
 
 // Muro bento horizontal (referencia: «bento-gallery» de 21st.dev): teselas de
 // distinto tamaño en 2 filas que se arrastran para explorar; el tamaño dice la
 // importancia (contradicción > historia en varios medios > foto > resto) y el
 // click expande la noticia con su detalle.
-function spanFor(n: StoryNode, st: { photos: number; clusters: number }): Span {
+function spanFor(n: StoryNode, st: { photos: number; clusters: number }): BentoSpan {
   if (n.item.contradicciones.length > 0) return 'big'
   if (n.group.length > 1) return st.clusters++ === 0 ? 'big' : 'tall'
   if (n.item.imagenUrl) {
@@ -25,7 +24,6 @@ function spanFor(n: StoryNode, st: { photos: number; clusters: number }): Span {
 
 export default function BentoWall({ onReady }: { onReady?: () => void }) {
   const { items, loading, exhausted, dateAnchor, setDateAnchor, loadNext, reload } = useNewsFeed(onReady)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const [overlay, setOverlay] = useState<OverlayState | null>(null)
 
   const nodes = useMemo(() => buildStoryNodes(items), [items])
@@ -34,106 +32,6 @@ export default function BentoWall({ onReady }: { onReady?: () => void }) {
     return nodes.map((n) => spanFor(n, st))
   }, [nodes])
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
-
-  // ── Arrastre con inercia (ratón); el dedo usa el scroll nativo ──────────
-  const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false, lastX: 0, lastT: 0, v: 0, raf: 0 })
-
-  const stopInertia = () => cancelAnimationFrame(drag.current.raf)
-
-  const onPointerDown = (e: RPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'touch' || e.button !== 0) return
-    const el = scrollRef.current
-    if (!el) return
-    stopInertia()
-    const d = drag.current
-    d.down = true
-    d.moved = false
-    d.startX = e.clientX
-    d.startLeft = el.scrollLeft
-    d.lastX = e.clientX
-    d.lastT = performance.now()
-    d.v = 0
-
-    const onMove = (ev: PointerEvent) => {
-      if (!d.down) return
-      const dx = ev.clientX - d.startX
-      if (!d.moved && Math.abs(dx) > 5) {
-        d.moved = true
-        el.classList.add('is-dragging')
-      }
-      if (!d.moved) return
-      el.scrollLeft = d.startLeft - dx
-      const now = performance.now()
-      const dt = Math.max(1, now - d.lastT)
-      d.v = (-(ev.clientX - d.lastX) / dt) * 16
-      d.lastX = ev.clientX
-      d.lastT = now
-    }
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      d.down = false
-      el.classList.remove('is-dragging')
-      if (!d.moved) return
-      const step = () => {
-        el.scrollLeft += d.v
-        d.v *= 0.94
-        if (Math.abs(d.v) > 0.3) d.raf = requestAnimationFrame(step)
-      }
-      d.raf = requestAnimationFrame(step)
-      window.setTimeout(() => (d.moved = false), 0)
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-  }
-
-  // El click que sigue a un arrastre no abre la tesela.
-  const onClickCapture = (e: MouseEvent<HTMLDivElement>) => {
-    if (drag.current.moved) {
-      e.stopPropagation()
-      e.preventDefault()
-      drag.current.moved = false
-    }
-  }
-
-  // Rueda → desplazamiento horizontal.
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey) return
-      e.preventDefault()
-      stopInertia()
-      el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [])
-
-  const maybeLoad = useCallback(() => {
-    const el = scrollRef.current
-    if (!el) return
-    if (el.scrollLeft + el.clientWidth * 2 >= el.scrollWidth) loadNext()
-  }, [loadNext])
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(maybeLoad)
-    return () => cancelAnimationFrame(raf)
-  }, [maybeLoad, items.length])
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ left: 0 })
-    setOverlay(null)
-  }, [dateAnchor])
-
-  const onHover = (e: RPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'touch') return
-    const t = (e.target as HTMLElement).closest<HTMLElement>('.bw-t')
-    if (!t) return
-    const r = t.getBoundingClientRect()
-    t.style.setProperty('--mx', `${(((e.clientX - r.left) / r.width) * 100).toFixed(1)}%`)
-    t.style.setProperty('--my', `${(((e.clientY - r.top) / r.height) * 100).toFixed(1)}%`)
-  }
 
   const open = (n: StoryNode, e: MouseEvent) => {
     const contra = n.item.contradicciones[0]
@@ -154,15 +52,12 @@ export default function BentoWall({ onReady }: { onReady?: () => void }) {
 
   return (
     <div className="vw-root">
-      <div
-        ref={scrollRef}
-        className="bw-scroll"
-        onPointerDown={onPointerDown}
-        onPointerMove={onHover}
-        onClickCapture={onClickCapture}
-        onScroll={maybeLoad}
+      <DragBento
+        onNearEnd={loadNext}
+        resetKey={dateAnchor}
+        empty={loading ? undefined : `No hay noticias ${dateAnchor ? `hasta el ${dateAnchor}` : 'todavía'}.`}
+        end={exhausted ? 'fin' : undefined}
       >
-        <div className="bw-grid">
           {nodes.map((n, i) => {
             const { item, group } = n
             const span = spans[i]
@@ -177,9 +72,11 @@ export default function BentoWall({ onReady }: { onReady?: () => void }) {
               ['--rgb' as string]: hexToRgb(color),
             }
             return (
-              <article
+              <BentoTile
                 key={item.id}
-                className={`bw-t s-${span}${contra ? ' is-contra' : ''}${isStory ? ' is-story' : ''}${photo ? ' has-photo' : ' no-photo'}`}
+                span={span}
+                accentRgb={hexToRgb(color)}
+                className={`bw-t${contra ? ' is-contra' : ''}${isStory ? ' is-story' : ''}${photo ? ' has-photo' : ' no-photo'}`}
                 style={style}
                 onClick={(e) => open(n, e)}
                 role="button"
@@ -247,15 +144,10 @@ export default function BentoWall({ onReady }: { onReady?: () => void }) {
                     {item.source} · {dia}
                   </span>
                 </div>
-              </article>
+              </BentoTile>
             )
           })}
-        </div>
-        {!loading && nodes.length === 0 && (
-          <div className="bw-empty">No hay noticias {dateAnchor ? `hasta el ${dateAnchor}` : 'todavía'}.</div>
-        )}
-        {exhausted && nodes.length > 0 && <div className="bw-end">fin</div>}
-      </div>
+      </DragBento>
 
       <div className="bw-fade bw-fade-l" aria-hidden="true" />
       <div className="bw-fade bw-fade-r" aria-hidden="true" />
@@ -268,10 +160,7 @@ export default function BentoWall({ onReady }: { onReady?: () => void }) {
         dateAnchor={dateAnchor}
         onToday={() => {
           if (dateAnchor !== null) setDateAnchor(null)
-          else {
-            scrollRef.current?.scrollTo({ left: 0, behavior: 'smooth' })
-            reload()
-          }
+          else reload()
         }}
         onSelect={setDateAnchor}
       />

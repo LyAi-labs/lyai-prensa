@@ -1,23 +1,33 @@
 import { useEffect, useRef, type RefObject } from 'react'
 
-// «Parar» sobre una card. Ratón: cursor quieto MOUSE_MS dentro de la card
-// (moverse más de MOUSE_JITTER px reinicia la cuenta). Dedo (Android): apoyar y
-// mantener TOUCH_MS sin moverse más de TOUCH_SLOP px; si se mueve antes es
-// scroll y se cancela. Con el dedo la activación es «pegajosa»: sigue activa al
-// levantar (para poder pulsar los botones) hasta tocar fuera o hacer scroll.
-const MOUSE_MS = 450
-const TOUCH_MS = 350
-const MOUSE_JITTER = 3
-const TOUCH_SLOP = 10
-const CLICK_GUARD_MS = 700
-
-type Options = {
+/**
+ * «Parar» sobre un elemento (peek / vista previa).
+ *
+ * Ratón: cursor quieto `mouseMs` dentro del elemento (moverse más de
+ * `mouseJitter` px reinicia la cuenta). Dedo (Android/iOS): apoyar y mantener
+ * `touchMs` sin moverse más de `touchSlop` px; si se mueve antes es scroll y se
+ * cancela. Con el dedo la activación es «pegajosa»: sigue activa al levantar
+ * (para poder pulsar botones) hasta tocar fuera o hacer scroll.
+ *
+ * Escribe `data-arming` y `--dwell` (0→1) en el elemento mientras se llena, para
+ * dibujar un anillo de progreso con CSS (ver components/flip-card).
+ */
+export interface UseDwellOptions {
   enabled: boolean
   onDwell: () => void
   onEnd: () => void
+  mouseMs?: number
+  touchMs?: number
+  mouseJitter?: number
+  touchSlop?: number
 }
 
-export function useDwell(rootRef: RefObject<HTMLElement>, { enabled, onDwell, onEnd }: Options) {
+const CLICK_GUARD_MS = 700
+
+export function useDwell(
+  rootRef: RefObject<HTMLElement>,
+  { enabled, onDwell, onEnd, mouseMs = 450, touchMs = 350, mouseJitter = 3, touchSlop = 10 }: UseDwellOptions,
+) {
   const cb = useRef({ onDwell, onEnd })
   cb.current = { onDwell, onEnd }
   const touchDwellAt = useRef(0)
@@ -31,7 +41,7 @@ export function useDwell(rootRef: RefObject<HTMLElement>, { enabled, onDwell, on
     let sx = 0
     let sy = 0
     let t0 = 0
-    let ms = MOUSE_MS
+    let ms = mouseMs
     let active = false
     let isTouch = false
 
@@ -54,7 +64,7 @@ export function useDwell(rootRef: RefObject<HTMLElement>, { enabled, onDwell, on
       sx = e.clientX
       sy = e.clientY
       isTouch = e.pointerType === 'touch'
-      ms = isTouch ? TOUCH_MS : MOUSE_MS
+      ms = isTouch ? touchMs : mouseMs
       t0 = performance.now()
       el.dataset.arming = '1'
       raf = requestAnimationFrame(tick)
@@ -84,7 +94,7 @@ export function useDwell(rootRef: RefObject<HTMLElement>, { enabled, onDwell, on
       if (!el!.contains(e.target as Node)) end()
     }
 
-    // El scroll de la propia hoja de peek no debe cerrarla.
+    // El scroll del propio contenido (p. ej. la hoja de peek) no debe cerrarlo.
     function onScroll(e: Event) {
       if (e.target instanceof Node && el!.contains(e.target)) return
       end()
@@ -99,8 +109,8 @@ export function useDwell(rootRef: RefObject<HTMLElement>, { enabled, onDwell, on
     const onMove = (e: PointerEvent) => {
       const d = Math.hypot(e.clientX - sx, e.clientY - sy)
       if (e.pointerType === 'touch') {
-        if (!active && d > TOUCH_SLOP) stopArming()
-      } else if (!active && d > MOUSE_JITTER) {
+        if (!active && d > touchSlop) stopArming()
+      } else if (!active && d > mouseJitter) {
         arm(e)
       }
     }
@@ -135,10 +145,10 @@ export function useDwell(rootRef: RefObject<HTMLElement>, { enabled, onDwell, on
       el.removeEventListener('contextmenu', onContextMenu)
       end()
     }
-  }, [rootRef, enabled])
+  }, [rootRef, enabled, mouseMs, touchMs, mouseJitter, touchSlop])
 
   // Tras un «mantener» con el dedo, Android puede lanzar un click al soltar:
-  // la card lo ignora para no girar justo después de abrir el peek.
+  // el elemento lo ignora para no accionarse justo después de abrir el peek.
   return {
     consumeTouchClick: () => {
       const recent = performance.now() - touchDwellAt.current < CLICK_GUARD_MS

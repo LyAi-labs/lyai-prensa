@@ -671,6 +671,7 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
           flipped: opts.flipped,
           sticky: opts.sticky,
           storyCount: k ? (countOf.get(k) ?? 1) : 1,
+          related: k ? itemsRef.current.filter((i) => keyOf.get(i.id) === k) : undefined,
           contrarioEnlace: contra
             ? itemsRef.current.find((i) => i.id === contra.noticiaContrariaId)?.enlace
             : undefined,

@@ -1,0 +1,69 @@
+{
+  "source": "/opt/lyai/app/lyai-shared",
+  "items": {
+    "hooks/use-dwell": {
+      "hash": "eabb52d80c9c3ed5",
+      "files": [
+        "index.ts",
+        "use-dwell.ts"
+      ]
+    },
+    "hooks/use-spotlight": {
+      "hash": "4ccc63cb8d9195e3",
+      "files": [
+        "index.ts",
+        "use-spotlight.ts"
+      ]
+    },
+    "components/flip-card": {
+      "hash": "5654cb402692a02e",
+      "files": [
+        "flip-card.css",
+        "flip-card.tsx",
+        "index.ts"
+      ]
+    },
+    "components/anchored-overlay": {
+      "hash": "10b934e5dbd9e296",
+      "files": [
+        "anchored-overlay.css",
+        "anchored-overlay.tsx",
+        "index.ts"
+      ]
+    },
+    "components/view-switch": {
+      "hash": "2a8b52409d5434a4",
+      "files": [
+        "index.ts",
+        "view-switch.css",
+        "view-switch.tsx"
+      ]
+    },
+    "components/splash-screen": {
+      "hash": "6f9292d50dd27042",
+      "files": [
+        "index.ts",
+        "splash-screen.css",
+        "splash-screen.tsx"
+      ]
+    },
+    "components/timeline": {
+      "hash": "b468e3bd72718559",
+      "files": [
+        "index.ts",
+        "timeline.css",
+        "timeline.tsx"
+      ]
+    },
+    "components/drag-bento": {
+      "hash": "12c70822cbce526d",
+      "files": [
+        "drag-bento.css",
+        "drag-bento.tsx",
+        "index.ts"
+      ]
+    }
+  },
+  "commit": "4633f75",
+  "syncedAt": "2026-10-02T20:45:51+00:00"
+}

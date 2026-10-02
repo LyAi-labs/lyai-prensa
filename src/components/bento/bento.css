@@ -1,38 +1,4 @@
-/* ── Muro bento horizontal ───────────────────────────────────────────────── */
-
-.bw-scroll {
-  --bw-h: clamp(420px, calc(100vh - 230px), 760px);
-  --bw-col: clamp(210px, 19vw, 300px);
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 90px 40px 70px;
-  cursor: grab;
-  touch-action: pan-x;
-  scrollbar-width: none;
-  overscroll-behavior: contain;
-}
-
-.bw-scroll::-webkit-scrollbar { display: none; }
-.bw-scroll.is-dragging { cursor: grabbing; user-select: none; }
-.bw-scroll.is-dragging .bw-t { pointer-events: none; }
-
-.bw-grid {
-  flex: none;
-  display: grid;
-  grid-auto-flow: column dense;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  grid-auto-columns: var(--bw-col);
-  gap: 14px;
-  height: var(--bw-h);
-}
-
-.s-big { grid-column: span 2; grid-row: span 2; }
-.s-tall { grid-row: span 2; }
-.s-wide { grid-column: span 2; }
+/* ── Muro bento: aspecto de las teselas (la mecánica es shared/drag-bento) ── */
 
 .bw-fade { position: absolute; top: 0; bottom: 0; width: 70px; z-index: 15; pointer-events: none; }
 .bw-fade-l { left: 0; background: linear-gradient(90deg, #050709, transparent); }
@@ -94,21 +60,6 @@
 
 .bw-t:hover .bw-shade { background: linear-gradient(180deg, rgba(5, 7, 9, 0.5) 0%, rgba(5, 7, 9, 0.6) 40%, rgba(5, 7, 9, 0.96) 100%); }
 
-/* Spotlight */
-.bw-t::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
-  opacity: 0;
-  transition: opacity 0.35s ease;
-  pointer-events: none;
-  background: radial-gradient(360px circle at var(--mx) var(--my), rgba(var(--rgb), 0.22), transparent 65%);
-}
-
-.bw-t:hover::before { opacity: 1; }
-
 .bw-top, .bw-bottom { position: relative; z-index: 2; }
 .bw-top { display: flex; align-items: center; gap: 8px; }
 .bw-time { margin-left: auto; font: 600 10.5px 'JetBrains Mono', ui-monospace, monospace; color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
@@ -147,9 +98,9 @@
   overflow: hidden;
 }
 
-.s-wide .bw-ttl { font-size: 17px; -webkit-line-clamp: 3; }
-.s-tall .bw-ttl { font-size: 18px; -webkit-line-clamp: 6; }
-.s-big .bw-ttl { font-size: clamp(20px, 2.1vw, 28px); line-height: 1.2; -webkit-line-clamp: 6; }
+.ls-span-wide .bw-ttl { font-size: 17px; -webkit-line-clamp: 3; }
+.ls-span-tall .bw-ttl { font-size: 18px; -webkit-line-clamp: 6; }
+.ls-span-big .bw-ttl { font-size: clamp(20px, 2.1vw, 28px); line-height: 1.2; -webkit-line-clamp: 6; }
 
 /* Resumen: aparece al pasar el cursor (en táctil no hay hover: se omite) */
 .bw-sum {
@@ -163,7 +114,7 @@
 }
 
 .bw-t:hover .bw-sum { max-height: 5.8em; opacity: 1; margin-top: 8px; }
-.bw-t.s-sm:hover .bw-sum { max-height: 4.4em; }
+.bw-t.ls-span-sm:hover .bw-sum { max-height: 4.4em; }
 
 .bw-foot { display: block; margin-top: 8px; font: 600 10.5px system-ui, sans-serif; letter-spacing: 0.03em; color: rgba(255, 255, 255, 0.62); }
 
@@ -179,8 +130,6 @@
 .bw-t.is-contra { border: 1.5px solid #ef4444; box-shadow: 0 0 40px -10px rgba(239, 68, 68, 0.7); }
 .bw-t.is-story { border: 1.5px solid rgba(0, 229, 255, 0.55); box-shadow: 0 0 30px -12px rgba(0, 229, 255, 0.6); }
 
-.bw-empty, .bw-end { align-self: center; padding: 0 40px; color: rgba(255, 255, 255, 0.4); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }
-
 @media (hover: none) {
   .bw-sum { display: none; }
 }
@@ -190,8 +139,6 @@
 }
 
 @media (max-width: 640px) {
-  .bw-scroll { --bw-col: 62vw; --bw-h: clamp(400px, calc(100vh - 250px), 640px); padding: 120px 16px 60px; }
   .bw-fade { width: 24px; }
-  .s-big, .s-wide { grid-column: span 1; }
-  .s-big .bw-ttl { font-size: 20px; }
+  .ls-span-big .bw-ttl { font-size: 20px; }
 }

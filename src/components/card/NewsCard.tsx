@@ -1,13 +1,13 @@
-import { memo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
+import { memo, useRef, useState, type CSSProperties } from 'react'
 import type { NewsItem } from '../../data/newsApi'
 import { contraColor, dominio, fechaCorta, hash, hexToRgb, iniciales, legible } from './cardUtils'
-import { useDwell } from './useDwell'
+import { FlipCard } from '../../shared/components/flip-card'
+import { useDwell } from '../../shared/hooks/use-dwell'
 import './card.css'
 
 // Alturas de banner por card — da ritmo de "mampostería" sin depender de que
 // la noticia tenga foto.
 const BANNER_H = [112, 148, 184]
-const TILT_MAX = 6
 
 type Props = {
   item: NewsItem
@@ -54,36 +54,6 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
   const bannerH = BANNER_H[hash(item.id) % BANNER_H.length]
   const hasPhoto = !!item.imagenUrl && !imgFailed
 
-  // Spotlight (--mx/--my) + tilt (--rx/--ry) por custom properties CSS: solo
-  // recomposición GPU, sin re-render de React ni repintado.
-  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'touch') return
-    const el = rootRef.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    const px = (e.clientX - r.left) / r.width
-    const py = (e.clientY - r.top) / r.height
-    el.style.setProperty('--mx', `${(px * 100).toFixed(1)}%`)
-    el.style.setProperty('--my', `${(py * 100).toFixed(1)}%`)
-    el.style.setProperty('--ry', `${((px - 0.5) * 2 * TILT_MAX).toFixed(2)}deg`)
-    el.style.setProperty('--rx', `${((0.5 - py) * 2 * TILT_MAX).toFixed(2)}deg`)
-  }
-
-  const onPointerLeave = () => {
-    const el = rootRef.current
-    if (!el) return
-    el.style.setProperty('--mx', '50%')
-    el.style.setProperty('--my', '50%')
-    el.style.setProperty('--rx', '0deg')
-    el.style.setProperty('--ry', '0deg')
-  }
-
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return
-    e.preventDefault()
-    onToggle(item.id)
-  }
-
   const backPhoto = hasPhoto ? (
     <img className="pc-back-photo" src={item.imagenUrl!} alt="" referrerPolicy="no-referrer" draggable={false} />
   ) : null
@@ -123,29 +93,18 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
   } as CSSProperties
 
   return (
-    <div
-      ref={rootRef}
-      className={`pc${contra ? ' pc-has-contra' : ''}${flipped ? ' is-flipped' : ''}${peek ? ' is-peek' : ''}${storyState ? ` is-${storyState}` : ''}`}
+    <FlipCard
+      rootRef={rootRef}
+      className={`pc${contra ? ' pc-has-contra' : ''}${peek ? ' is-peek' : ''}${storyState ? ` is-${storyState}` : ''}`}
       style={style}
-      onPointerMove={onPointerMove}
-      onPointerLeave={onPointerLeave}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="pc-tilt">
-        <div
-          className="pc-inner"
-          role="button"
-          tabIndex={0}
-          aria-pressed={flipped}
-          aria-label={`${item.source}: ${item.headline}`}
-          onClick={() => {
-            if (consumeTouchClick()) return
-            onToggle(item.id)
-          }}
-          onKeyDown={onKeyDown}
-        >
-          {/* ── Frente ─────────────────────────────────────────────── */}
-          <div className="pc-face pc-front">
+      flipped={flipped}
+      onFlippedChange={() => onToggle(item.id)}
+      shouldIgnoreClick={consumeTouchClick}
+      ariaLabel={`${item.source}: ${item.headline}`}
+      frontClassName="pc-face pc-front"
+      backClassName="pc-face pc-back"
+      front={
+        <>
             <div className="pc-banner" style={{ height: bannerH }}>
               {hasPhoto ? (
                 <img
@@ -215,10 +174,10 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
                 </button>
               </div>
             </div>
-          </div>
-
-          {/* ── Reverso ────────────────────────────────────────────── */}
-          <div className="pc-face pc-back" aria-hidden={!flipped}>
+        </>
+      }
+      back={
+        <>
             {contra ? (
               <div className="pc-back-scroll">
                 {backPhoto}
@@ -289,15 +248,17 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
               </div>
             )}
             <span className="pc-back-hint">click para volver</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="dwell-ring" aria-hidden="true" />
+        </>
+      }
+      overlay={
+        <>
+          <div className="ls-flip-ring" aria-hidden="true" />
       {storyCount !== undefined && storyCount > 1 && (
         <span className="story-badge">× {storyCount} medios cuentan esto</span>
       )}
-    </div>
+        </>
+      }
+    />
   )
 }
 

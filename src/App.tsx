@@ -2,18 +2,18 @@ import { useCallback, useState } from 'react'
 import BentoWall from './components/bento/BentoWall'
 import Splash from './components/card/Splash'
 import TimelineView from './components/views/TimelineView'
-import ViewSwitch from './components/views/ViewSwitch'
-import { useView } from './components/views/useView'
+import { ViewSwitch } from './shared/components/view-switch'
 
 // v2 = versión normal + muro bento horizontal (en vez del muro WebGL). Las
-// cards, el splash y los gestos son los compartidos de components/card/; la
-// línea de tiempo (components/views/) es la vista alternativa.
+// cards, el splash y los gestos son los de components/card/ (sobre lyai-shared);
+// la línea de tiempo (components/views/) es la vista alternativa: solo una
+// opción, la predeterminada es SIEMPRE el muro y no se recuerda la elección.
 type View = 'muro' | 'tiempo'
 
 export default function App() {
   const [ready, setReady] = useState(false)
   const onReady = useCallback(() => setReady(true), [])
-  const [view, setView] = useView<View>('muro')
+  const [view, setView] = useState<View>('muro')
   return (
     <>
       {view === 'muro' ? <BentoWall key="muro" onReady={onReady} /> : <TimelineView key="tiempo" onReady={onReady} />}
