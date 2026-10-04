@@ -18,14 +18,16 @@ from datetime import date, datetime
 from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.classification import SECCIONES, seccion_regex, tipo_fuente, todas_las_secciones_regex
 from api.deps import get_db
 from api.queries import (
     SELECT_CONTRADICCIONES_SQL,
     SELECT_DIAS_CONTRADICCION_SQL,
     SELECT_FUENTES_SQL,
-    SELECT_NOTICIAS_ANTES_SQL,
-    SELECT_NOTICIAS_SQL,
     build_contradicciones_por_noticia,
+    build_noticias_where,
+    count_noticias_filtrado_sql,
+    select_noticias_filtrado_sql,
 )
 from api.schemas import FuenteOut, HealthOut, NoticiaOut
 
@@ -56,18 +58,57 @@ def health(conn=Depends(get_db)) -> HealthOut:
         return HealthOut(status="degraded", db=False)
 
 
+def _resolve_fuente_ids(conn, fuente_tipo: str) -> list[str]:
+    """nacional/regional/tv/radio -> lista de fuente_id. La clasificación no
+    existe en BD (ver api/classification.py); se resuelve contra las ~82
+    fuentes activas en cada petición — barato, no hace falta cachear."""
+    with conn.cursor() as cur:
+        cur.execute(SELECT_FUENTES_SQL)
+        rows = _rows_as_dicts(cur)
+    return [str(r["id"]) for r in rows if tipo_fuente(r["nombre"]) == fuente_tipo]
+
+
+def _where_from_filtros(
+    conn,
+    *,
+    antes: datetime | None,
+    q: str | None,
+    fuente_tipo: str | None,
+    seccion: str | None,
+    solo_contradicciones: bool,
+) -> tuple[str, dict]:
+    fuente_ids = _resolve_fuente_ids(conn, fuente_tipo) if fuente_tipo else None
+    sec_regex = seccion_regex(seccion) if seccion and seccion in SECCIONES else None
+    sec_excluir_regex = todas_las_secciones_regex() if seccion == "otros" else None
+    return build_noticias_where(
+        antes=antes,
+        q=q,
+        fuente_ids=fuente_ids,
+        seccion_regex=sec_regex,
+        seccion_excluir_regex=sec_excluir_regex,
+        solo_contradicciones=solo_contradicciones,
+    )
+
+
 @app.get("/api/noticias", response_model=list[NoticiaOut])
 def listar_noticias(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     antes: datetime | None = Query(default=None, description="Ancla al botón Hoy/calendario: solo noticias publicadas hasta esta fecha"),
+    q: str | None = Query(default=None, description="Busca en titular+descripcion (ILIKE)"),
+    fuente_tipo: str | None = Query(default=None, description="nacional | regional | tv | radio"),
+    seccion: str | None = Query(default=None, description="economia | deportes | politica | internacional | sociedad | cultura | opinion | tecnologia | otros"),
+    solo_contradicciones: bool = Query(default=False),
     conn=Depends(get_db),
 ) -> list[NoticiaOut]:
+    where, params = _where_from_filtros(
+        conn, antes=antes, q=q, fuente_tipo=fuente_tipo, seccion=seccion, solo_contradicciones=solo_contradicciones
+    )
+    params["limit"] = limit
+    params["offset"] = offset
+
     with conn.cursor() as cur:
-        if antes is not None:
-            cur.execute(SELECT_NOTICIAS_ANTES_SQL, {"limit": limit, "offset": offset, "antes": antes})
-        else:
-            cur.execute(SELECT_NOTICIAS_SQL, {"limit": limit, "offset": offset})
+        cur.execute(select_noticias_filtrado_sql(where), params)
         noticias = _rows_as_dicts(cur)
 
     if not noticias:
@@ -97,6 +138,27 @@ def listar_noticias(
         )
         for n in noticias
     ]
+
+
+@app.get("/api/noticias/count")
+def contar_noticias(
+    antes: datetime | None = Query(default=None),
+    q: str | None = Query(default=None),
+    fuente_tipo: str | None = Query(default=None),
+    seccion: str | None = Query(default=None),
+    solo_contradicciones: bool = Query(default=False),
+    conn=Depends(get_db),
+) -> dict[str, int]:
+    """Total real para el contador del muro ("N de TOTAL noticias"). Antes
+    del toolbar de filtros, TOTAL vivía hardcodeado en el frontend (3330) —
+    con filtros activos esa cifra ya no significa nada, hace falta contarlo."""
+    where, params = _where_from_filtros(
+        conn, antes=antes, q=q, fuente_tipo=fuente_tipo, seccion=seccion, solo_contradicciones=solo_contradicciones
+    )
+    with conn.cursor() as cur:
+        cur.execute(count_noticias_filtrado_sql(where), params)
+        total = cur.fetchone()[0]
+    return {"total": total}
 
 
 @app.get("/api/fuentes", response_model=list[FuenteOut])

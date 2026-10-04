@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { generateSampleNews, type NewsItem as MockNewsItem } from '../data/sampleNews'
-import { fetchDiasContradiccion, fetchNoticias, type NewsItem } from '../data/newsApi'
+import { fetchDiasContradiccion, fetchNoticias, fetchNoticiasCount, type NewsFilters, type NewsItem } from '../data/newsApi'
 import CardOverlay, { type OverlayState } from './card/CardOverlay'
 import { contraColor, fechaCorta, iniciales, legible, storyKey } from './card/cardUtils'
+import Toolbar from './toolbar/Toolbar'
 import './Wall.css'
 
 const ROWS = 3
@@ -337,7 +338,14 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
   // (con animación de entrada) en vez de paginación normal (sin animación).
   const justJumpedRef = useRef(false)
   const [page, setPage] = useState(0)
-  const [totalCount] = useState(3330)
+  const [totalCount, setTotalCount] = useState(3330)
+  // Toolbar: búsqueda + fuente + sección + contradicciones. Cambiar un
+  // filtro vuelve a la página 0, igual que Hoy/calendario.
+  const [filters, setFilters] = useState<NewsFilters>({})
+  const handleFiltersChange = useCallback((next: NewsFilters) => {
+    setFilters(next)
+    setPage(0)
+  }, [])
   // Card DOM que se coloca sobre la card del canvas (peek / giro). El ref
   // espeja el estado para que la escena Three.js (cierre fuera de React) sepa
   // si hay overlay abierto sin re-suscribirse.
@@ -391,7 +399,7 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
       let items: NewsItem[]
       try {
         const antes = dateAnchor ? `${dateAnchor}T23:59:59.999` : undefined
-        items = await fetchNoticias(PAGE_SIZE, page * PAGE_SIZE, antes)
+        items = await fetchNoticias(PAGE_SIZE, page * PAGE_SIZE, antes, filters)
         if (items.length === 0 && page > 0) {
           // Si nos pasamos de página, volvemos a la 0
           setPage(0)
@@ -942,7 +950,18 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
       disposed = true
       cleanup?.()
     }
-  }, [page, dateAnchor])
+  }, [page, dateAnchor, filters])
+
+  // Total real para el contador ("Mostrando X-Y de TOTAL") — antes iba
+  // hardcodeado a 3330; con filtros activos esa cifra ya no significa nada.
+  useEffect(() => {
+    let cancelled = false
+    const antes = dateAnchor ? `${dateAnchor}T23:59:59.999` : undefined
+    fetchNoticiasCount(antes, filters)
+      .then((total) => { if (!cancelled) setTotalCount(total) })
+      .catch(() => { /* se queda con el último total válido */ })
+    return () => { cancelled = true }
+  }, [dateAnchor, filters])
 
   // «Misma historia»: con una card abierta, la escena atenúa el resto y
   // ilumina las gemelas; al cerrarla, vuelve todo.
@@ -996,6 +1015,13 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
             onClose={() => setShowCalendar(false)}
           />
         )}
+      </div>
+
+      {/* Toolbar: búsqueda + fuente + sección + contradicciones. El contador
+          ya existe en wall-legend más abajo ("Mostrando X-Y de TOTAL"), así
+          que aquí no se repite. */}
+      <div className="wall-toolbar-wrap">
+        <Toolbar filters={filters} onChange={handleFiltersChange} count={null} total={null} />
       </div>
 
       {/* Overlay Superior e Inferior */}

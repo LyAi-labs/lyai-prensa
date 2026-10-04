@@ -102,13 +102,45 @@ function mapNoticia(n: ApiNoticia): NewsItem {
   }
 }
 
-export async function fetchNoticias(limit = 108, offset = 0, antes?: string): Promise<NewsItem[]> {
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+// Filtros del toolbar (búsqueda + fuente + sección + contradicciones). La
+// clasificación fuente->tipo y la de sección viven solo en el backend
+// (api/classification.py) — el cliente nunca las duplica, solo manda el id.
+export type NewsFilters = {
+  q?: string
+  fuenteTipo?: 'nacional' | 'regional' | 'tv' | 'radio'
+  seccion?: 'economia' | 'deportes' | 'politica' | 'internacional' | 'sociedad' | 'cultura' | 'opinion' | 'tecnologia' | 'otros'
+  soloContradicciones?: boolean
+}
+
+function filtrosToParams(filters?: NewsFilters): Record<string, string> {
+  if (!filters) return {}
+  const out: Record<string, string> = {}
+  if (filters.q) out.q = filters.q
+  if (filters.fuenteTipo) out.fuente_tipo = filters.fuenteTipo
+  if (filters.seccion) out.seccion = filters.seccion
+  if (filters.soloContradicciones) out.solo_contradicciones = 'true'
+  return out
+}
+
+export async function fetchNoticias(limit = 108, offset = 0, antes?: string, filters?: NewsFilters): Promise<NewsItem[]> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset), ...filtrosToParams(filters) })
   if (antes) params.set('antes', antes)
   const res = await fetch(`${API_BASE}/noticias?${params}`)
   if (!res.ok) throw new Error(`API /noticias respondió ${res.status}`)
   const data: ApiNoticia[] = await res.json()
   return data.map(mapNoticia)
+}
+
+// Total real para el contador del muro, con los mismos filtros aplicados —
+// antes del toolbar el total iba hardcodeado (3330) en WallGL.tsx; con
+// filtros activos esa cifra deja de significar nada.
+export async function fetchNoticiasCount(antes?: string, filters?: NewsFilters): Promise<number> {
+  const params = new URLSearchParams(filtrosToParams(filters))
+  if (antes) params.set('antes', antes)
+  const res = await fetch(`${API_BASE}/noticias/count?${params}`)
+  if (!res.ok) throw new Error(`API /noticias/count respondió ${res.status}`)
+  const data: { total: number } = await res.json()
+  return data.total
 }
 
 // YYYY-MM-DD de los días (en [desde, hasta)) con al menos una contradicción
