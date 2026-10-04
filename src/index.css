@@ -1,0 +1,39 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter,
+    'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Interruptor de versión (normal / v2 / v3) — ver src/components/DeploySwitch.tsx.
+   Reutiliza el ViewSwitch de lyai-shared, posicionado debajo de Hoy+calendario
+   (.pw-date-nav, top:20px right:28px) para no solaparse. */
+.ls-vs-deploy {
+  top: 60px;
+  left: auto;
+  right: 28px;
+  transform: none;
+  padding: 2px;
+  background: rgba(10, 11, 13, 0.55);
+}
+.ls-vs-deploy .ls-vs-btn { padding: 5px 10px; font-size: 10.5px; }
+.ls-vs-deploy .ls-vs-btn.is-on { background: rgba(255, 179, 0, 0.2); color: #ffb300; }
+
+@media (max-width: 640px) {
+  .ls-vs-deploy { top: 104px; right: 10px; }
+}
