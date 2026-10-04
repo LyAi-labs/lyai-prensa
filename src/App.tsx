@@ -3,6 +3,7 @@ import WallGL from './components/WallGL'
 import Splash from './components/card/Splash'
 import TimelineView from './components/views/TimelineView'
 import { ViewSwitch } from './shared/components/view-switch'
+import DeploySwitch from './components/DeploySwitch'
 
 // Vista predeterminada: el muro 3D. La línea de tiempo es solo una opción
 // (selector arriba) y no se recuerda entre visitas.
@@ -23,6 +24,7 @@ export default function App() {
           { id: 'tiempo', label: 'Línea de tiempo', icon: 'timeline' },
         ]}
       />
+      <DeploySwitch />
       <Splash ready={ready} />
     </>
   )
