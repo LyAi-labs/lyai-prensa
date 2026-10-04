@@ -5,9 +5,9 @@ import { FlipCard } from '../../shared/components/flip-card'
 import { useDwell } from '../../shared/hooks/use-dwell'
 import './card.css'
 
-// Alturas de banner por card — da ritmo de "mampostería" sin depender de que
-// la noticia tenga foto.
-const BANNER_H = [112, 148, 184]
+// Alturas de card — da ritmo de "mampostería" sin depender de que la
+// noticia tenga foto. La foto ahora cubre la card entera (no solo un banner).
+const CARD_H = [360, 400, 440]
 
 type Props = {
   item: NewsItem
@@ -51,7 +51,7 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
   const cColor = contra ? contraColor(contra.intensidad) : null
   const { dia, hora } = fechaCorta(item.publishedAt)
   const ini = iniciales(item.source)
-  const bannerH = BANNER_H[hash(item.id) % BANNER_H.length]
+  const cardH = CARD_H[hash(item.id) % CARD_H.length]
   const hasPhoto = !!item.imagenUrl && !imgFailed
 
   const backPhoto = hasPhoto ? (
@@ -87,7 +87,7 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
     '--c-rgb': hexToRgb(cColor ?? item.sourceColor),
     '--c-text': legible(item.sourceColor),
     '--contra': cColor ?? 'transparent',
-    '--banner-h': `${bannerH}px`,
+    '--card-h': `${cardH}px`,
     // Profundidad con la que sale del plano en la rejilla 3D (más intensidad, más Z).
     '--pop': `${Math.round(40 + (contra?.intensidad ?? 0) * 70)}px`,
   } as CSSProperties
@@ -105,20 +105,23 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
       backClassName="pc-face pc-back"
       front={
         <>
-            <div className="pc-banner" style={{ height: bannerH }}>
-              {hasPhoto ? (
-                <img
-                  src={item.imagenUrl!}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  draggable={false}
-                  onError={() => setImgFailed(true)}
-                />
-              ) : (
-                <span className="pc-mark" aria-hidden="true">{ini}</span>
-              )}
+            {hasPhoto ? (
+              <img
+                className="pc-media"
+                src={item.imagenUrl!}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                draggable={false}
+                onError={() => setImgFailed(true)}
+              />
+            ) : (
+              <span className="pc-nomedia" aria-hidden="true">{ini}</span>
+            )}
+            <div className="pc-scrim" aria-hidden="true" />
+
+            <div className="pc-top">
               <span className="pc-chip">
                 <i />
                 {item.source}
@@ -126,32 +129,40 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
               {hasPhoto && <span className="pc-photo-tag">FOTO</span>}
             </div>
 
-            <div className="pc-body">
-              <h3 className="pc-title">{item.headline}</h3>
-              {item.summary && <p className="pc-sum">{item.summary}</p>}
-            </div>
-
-            <div className="pc-foot">
-              <span className="pc-avatar" aria-hidden="true">{ini}</span>
-              <span className="pc-meta">
-                <b>{item.source}</b>
-                <small>{dia}{hora && ` · ${hora}`}</small>
-              </span>
-              <span className="pc-go" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M13 6l6 6-6 6" />
-                </svg>
-              </span>
-            </div>
-
             {storyState === 'same' && <span className="pc-same-chip">misma historia</span>}
 
             {contra && (
-              <div className="pc-contra-bar">
-                <span>⚠ Contradice a {contra.fuenteContraria}</span>
-                <b>{contra.intensidad.toFixed(1)}</b>
-              </div>
+              <span className="pc-contra-eyebrow">
+                ⚠ Contradicción · {contra.tema}
+              </span>
             )}
+
+            <div className="pc-bottom">
+              <h3 className="pc-title">{item.headline}</h3>
+              {contra ? (
+                <div className="pc-vs">
+                  <div className="pc-vs-row">
+                    <span className="pc-vs-src"><i style={{ background: item.sourceColor }} /><span>{item.source}</span></span>
+                    <span className="pc-vs-mid">{contra.intensidad.toFixed(1)}</span>
+                    <span className="pc-vs-src"><i style={{ background: 'rgba(255,255,255,.4)' }} /><span>{contra.fuenteContraria}</span></span>
+                  </div>
+                  <div className="pc-vs-meter"><i style={{ width: `${Math.min(100, contra.intensidad * 100)}%` }} /></div>
+                </div>
+              ) : (
+                <div className="pc-footrow">
+                  <span className="pc-avatar" aria-hidden="true">{ini}</span>
+                  <span className="pc-meta">
+                    <b>{item.source}</b>
+                    <small>{dia}{hora && ` · ${hora}`}</small>
+                  </span>
+                  <span className="pc-go" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M7 17 17 7M9 7h8v8" />
+                    </svg>
+                  </span>
+                </div>
+              )}
+            </div>
 
             {/* Peek: resumen completo y acciones. */}
             <div className="peek-sheet" aria-hidden={!peek}>
