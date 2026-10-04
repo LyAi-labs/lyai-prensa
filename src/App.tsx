@@ -4,6 +4,7 @@ import Splash from './components/card/Splash'
 import TimelineView from './components/views/TimelineView'
 import ParallaxGallery from './components/parallax3/ParallaxGallery'
 import { ViewSwitch } from './shared/components/view-switch'
+import DeploySwitch from './components/DeploySwitch'
 
 // v2 = versión normal + muro bento horizontal (en vez del muro WebGL). Las
 // cards, el splash y los gestos son los de components/card/ (sobre lyai-shared);
@@ -48,6 +49,7 @@ export default function App() {
           { id: 'parallax', label: 'Parallax', icon: parallaxIcon },
         ]}
       />
+      <DeploySwitch />
       <Splash ready={ready} />
     </>
   )
