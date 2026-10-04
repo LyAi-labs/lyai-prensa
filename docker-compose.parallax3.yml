@@ -1,0 +1,44 @@
+# Versión experimental «muro v3 — parallax 3D original de 21st.dev» (rama
+# feature/muro-v3-parallax-original), desplegada EN PARALELO a producción en
+# https://prensa.lyai.es/v3/ — no sustituye ni recrea los servicios `prensa`,
+# `api` (docker-compose.yml) ni `prensa_parallax` /v2 (docker-compose.parallax.yml).
+#
+# Uso (binario con guion, no el plugin `docker compose`; proyecto aparte para
+# no tocar los demás contenedores):
+#   docker-compose -p lyai-prensa-parallax3 -f docker-compose.parallax3.yml up -d --build
+# Retirar (SIN -v):
+#   docker-compose -p lyai-prensa-parallax3 -f docker-compose.parallax3.yml down
+#
+# Traefik quita el prefijo /v3 antes de llegar a nginx; el build usa
+# VITE_BASE=/v3/ para que los assets se pidan bajo ese prefijo. La API es la
+# misma de producción (`/api` del mismo origen, mismo patrón que /v2).
+#
+# ⚠️ Las labels de abajo son INFORMATIVAS: Traefik de este server solo usa el
+# provider de fichero. El routing real está en
+# /home/lyai/traefik/config/dynamic/routes.yml (`prensa-v3-https`).
+
+services:
+  prensa_parallax3:
+    build:
+      context: .
+      args:
+        VITE_BASE: /v3/
+    image: lyai-prensa-parallax3:2026-10-02
+    container_name: lyai_prensa_parallax3
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prensa-parallax3.rule=Host(`prensa.lyai.es`) && (Path(`/v3`) || PathPrefix(`/v3/`))"
+      - "traefik.http.routers.prensa-parallax3.priority=100"
+      - "traefik.http.routers.prensa-parallax3.entrypoints=websecure"
+      - "traefik.http.routers.prensa-parallax3.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prensa-parallax3.middlewares=prensa-parallax3-strip"
+      - "traefik.http.middlewares.prensa-parallax3-strip.stripprefix.prefixes=/v3"
+      - "traefik.http.services.prensa-parallax3.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
+    name: traefik_traefik

@@ -1,0 +1,28 @@
+node_modules
+dist
+dist-ssr
+.DS_Store
+*.local
+.env
+.env.local
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.log
+
+# TypeScript / Vite build artifacts
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Playwright
+test-results/
+playwright-report/
+e2e/screenshots/

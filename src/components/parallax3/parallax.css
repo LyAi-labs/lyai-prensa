@@ -1,0 +1,154 @@
+/* ── Muro v3 — galería parallax 3D (mecánica: scroll-linked, ver ParallaxGallery.tsx) ── */
+
+.pg-stage {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.pg-stage::-webkit-scrollbar { width: 10px; }
+.pg-stage::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 8px; }
+
+.pg-track { position: relative; width: 100%; }
+
+.pg-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pg-banner {
+  position: relative;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 1920px;
+  margin: 0 auto;
+  will-change: width, height, border-radius;
+}
+
+.pg-perspective {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+  pointer-events: none;
+}
+
+/* Máscara de sombra ambiental en los 4 bordes (como el original de 21st.dev) */
+.pg-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  box-shadow:
+    inset 0 90px 140px -50px rgba(0, 0, 0, 1),
+    inset 0 -90px 140px -50px rgba(0, 0, 0, 1),
+    inset 130px 0 140px -50px rgba(0, 0, 0, 1),
+    inset -130px 0 140px -50px rgba(0, 0, 0, 1);
+}
+
+.pg-grid {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  width: 118vw;
+  height: 148vh;
+  will-change: transform;
+  pointer-events: auto;
+}
+
+.pg-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 22vw;
+  min-width: 190px;
+  pointer-events: auto;
+  will-change: transform;
+}
+
+.pg-card {
+  position: relative;
+  width: 100%;
+  height: clamp(170px, 20vh, 320px);
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111;
+  cursor: pointer;
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s ease;
+}
+.pg-card:hover,
+.pg-card:focus-visible { transform: scale(1.025); border-color: color-mix(in srgb, var(--acc) 60%, transparent); z-index: 2; }
+.pg-card:focus-visible { box-shadow: 0 0 0 2px #00e5ff; }
+
+.pg-card.is-contra {
+  border-color: color-mix(in srgb, var(--acc) 70%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--acc) 45%, transparent), 0 0 24px -6px color-mix(in srgb, var(--acc) 70%, transparent);
+}
+
+.pg-card img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.86; transition: opacity 0.25s ease, transform 0.4s ease; }
+.pg-card:hover img { opacity: 1; transform: scale(1.04); }
+
+.pg-grad {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 45%, #12151c), color-mix(in srgb, var(--acc) 8%, #0b0d12));
+}
+.pg-grad span { font: 800 28px system-ui, sans-serif; letter-spacing: 0.03em; color: rgba(255, 255, 255, 0.5); }
+
+.pg-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.2) 55%, transparent 100%);
+}
+
+.pg-pill {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font: 700 9.5px/1 system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 3px 7px;
+  border-radius: 5px;
+  z-index: 1;
+}
+
+.pg-ttl {
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: 8px;
+  margin: 0;
+  font: 600 12.5px/1.28 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .pg-col { width: 44vw; min-width: 140px; }
+  .pg-grid { gap: 10px; }
+}

@@ -1,0 +1,148 @@
+/* FlipCard — mecanismo de giro, spotlight y tilt. El contenido lo estiliza cada proyecto.
+   Variables: --ls-accent-rgb (spotlight; cae a --c-rgb), --ls-flip-radius, --ls-flip-bg,
+   --ls-flip-border, --ls-flip-shadow, --ls-flip-back-bg. */
+
+.ls-flip {
+  position: relative;
+  --mx: 50%;
+  --my: 50%;
+  --rx: 0deg;
+  --ry: 0deg;
+  --lift: 0px;
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (pointer: coarse) {
+  .ls-flip { user-select: none; -webkit-user-select: none; }
+}
+
+.ls-flip:hover { --lift: -4px; }
+
+.ls-flip-tilt {
+  transform: perspective(900px) translateY(var(--lift)) rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.22s ease-out;
+}
+
+.ls-flip-inner {
+  position: relative;
+  border-radius: var(--ls-flip-radius, 14px);
+  cursor: pointer;
+  outline: none;
+}
+
+.ls-flip-inner:focus-visible { box-shadow: 0 0 0 2px #00e5ff, 0 0 0 5px #050709; }
+
+.ls-flip-face {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--ls-flip-radius, 14px);
+  background: var(--ls-flip-bg, #12151c);
+  border: 1px solid var(--ls-flip-border, rgba(255, 255, 255, 0.09));
+  box-shadow: var(--ls-flip-shadow, 0 18px 40px -22px rgba(0, 0, 0, 0.9));
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+/* Spotlight: glow que sigue al cursor (--mx/--my) en el color de acento */
+.ls-flip-face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    420px circle at var(--mx) var(--my),
+    rgba(var(--ls-accent-rgb, var(--c-rgb, 99, 102, 241)), 0.2),
+    rgba(var(--ls-accent-rgb, var(--c-rgb, 99, 102, 241)), 0.06) 40%,
+    transparent 70%
+  );
+}
+
+.ls-flip-face::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: radial-gradient(300px circle at var(--mx) var(--my), rgba(var(--ls-accent-rgb, var(--c-rgb, 99, 102, 241)), 0.7), transparent 60%) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.ls-flip:hover .ls-flip-face::before,
+.ls-flip:hover .ls-flip-face::after { opacity: 1; }
+
+.ls-flip-face > * { position: relative; z-index: 1; }
+
+.ls-flip-back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ls-flip-back-bg, linear-gradient(160deg, #14171e 0%, #0b0d12 75%));
+}
+
+/* ── Giro en dos tiempos, sin 3D con caras traseras ──────────────────────────
+   La cara frontal gira 0→90° (queda de canto) y se oculta; el reverso entra
+   de -90°→0. Cada cara lleva su propia perspective(): no hay preserve-3d ni
+   backface-visibility de los que depender (algunos motores los aplanan o los
+   ignoran y se veían las dos caras superpuestas, una en espejo). */
+
+.ls-flip-front {
+  transform: perspective(900px) rotateY(0deg);
+  transition: transform 0.28s ease-out 0.28s, visibility 0s linear 0.28s, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.ls-flip-back {
+  visibility: hidden;
+  transform: perspective(900px) rotateY(-90deg);
+  transition: transform 0.28s ease-in, visibility 0s linear 0.28s;
+}
+
+.ls-flip.is-flipped .ls-flip-front {
+  visibility: hidden;
+  transform: perspective(900px) rotateY(90deg);
+  transition: transform 0.28s ease-in, visibility 0s linear 0.28s, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.ls-flip.is-flipped .ls-flip-back {
+  visibility: visible;
+  transform: perspective(900px) rotateY(0deg);
+  transition: transform 0.28s ease-out 0.28s, visibility 0s linear 0.28s;
+}
+
+/* Anillo de progreso de use-dwell (--dwell 0→1 mientras se «para») */
+.ls-flip-ring {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(rgba(0, 229, 255, 0.85) calc(var(--dwell, 0) * 1turn), transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 17px, #000 18px);
+  mask: radial-gradient(circle, transparent 17px, #000 18px);
+}
+
+.ls-flip[data-arming] .ls-flip-ring { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-flip-tilt { transition-duration: 0.01s; }
+  .ls-flip-front,
+  .ls-flip-back,
+  .ls-flip.is-flipped .ls-flip-front,
+  .ls-flip.is-flipped .ls-flip-back { transition: none; }
+}
