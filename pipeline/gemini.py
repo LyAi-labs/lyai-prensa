@@ -19,11 +19,19 @@ de generación otra vez, no asumir.
 from __future__ import annotations
 
 import os
+import time
 
 import httpx
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_MODEL = "gemini-3.8-flash"
+GEMINI_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+]
+GEMINI_MODEL = GEMINI_MODELS[0]
 
 
 class GeminiError(RuntimeError):
@@ -50,8 +58,9 @@ def generate_json(
     Devuelve (texto_json_crudo, usage_metadata) — el llamador valida el
     JSON contra su propio schema Pydantic; este módulo no sabe de schemas
     concretos, solo habla con la API.
+    Si el modelo principal sufre 503 (alta demanda) o 429/404, recurre
+    a los modelos Flash hermanos en el tier gratuito sin coste adicional.
     """
-    url = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={_api_key()}"
     payload = {
         "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_message}]}],
@@ -62,25 +71,38 @@ def generate_json(
         },
     }
 
-    try:
-        resp = httpx.post(url, json=payload, timeout=timeout)
-    except httpx.HTTPError as e:
-        raise GeminiError(f"Gemini: error de red — {e}") from e
+    last_err: Exception | None = None
+    for model in GEMINI_MODELS:
+        url = f"{GEMINI_BASE}/{model}:generateContent?key={_api_key()}"
+        try:
+            resp = httpx.post(url, json=payload, timeout=timeout)
+        except httpx.HTTPError as e:
+            last_err = GeminiError(f"Gemini ({model}): error de red — {e}")
+            continue
 
-    if resp.status_code != 200:
-        body = resp.text[:500].replace(_api_key(), "***")
-        raise GeminiError(f"Gemini {resp.status_code}: {body}")
+        if resp.status_code in (503, 429, 404):
+            last_err = GeminiError(f"Gemini {resp.status_code} ({model}): {resp.text[:300]}")
+            time.sleep(2.0)
+            continue
+        elif resp.status_code != 200:
+            body = resp.text[:500].replace(_api_key(), "***")
+            raise GeminiError(f"Gemini {resp.status_code}: {body}")
 
-    data = resp.json()
-    candidates = data.get("candidates") or []
-    if not candidates:
-        reason = data.get("promptFeedback", {}).get("blockReason", "sin candidatos")
-        raise GeminiError(f"Gemini no devolvió contenido: {reason}")
+        data = resp.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            reason = data.get("promptFeedback", {}).get("blockReason", "sin candidatos")
+            raise GeminiError(f"Gemini no devolvió contenido: {reason}")
 
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = "".join(p.get("text", "") for p in parts)
-    if not text:
-        finish_reason = candidates[0].get("finishReason", "desconocido")
-        raise GeminiError(f"Gemini devolvió texto vacío (finishReason={finish_reason})")
+        parts = candidates[0].get("content", {}).get("parts", [])
+        text = "".join(p.get("text", "") for p in parts)
+        if not text:
+            finish_reason = candidates[0].get("finishReason", "desconocido")
+            raise GeminiError(f"Gemini devolvió texto vacío (finishReason={finish_reason})")
 
-    return text, data.get("usageMetadata", {})
+        return text, data.get("usageMetadata", {})
+
+    if last_err:
+        raise last_err
+    raise GeminiError("No se pudo obtener respuesta de ningún modelo de Gemini Flash")
+

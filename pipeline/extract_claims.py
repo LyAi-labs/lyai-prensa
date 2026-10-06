@@ -40,7 +40,7 @@ EXTRACTOR_MODEL = GEMINI_MODEL
 # contra un 429 real: "generate_content_free_tier_requests, limit: 20").
 # Sin este respiro, cualquier lote de más de un puñado de noticias empieza
 # a fallar en cadena a partir de la segunda llamada.
-SLEEP_ENTRE_LLAMADAS = 3.5
+SLEEP_ENTRE_LLAMADAS = 4.5
 
 
 SYSTEM_PROMPT = """Eres un extractor experto de afirmaciones (claims) factuales en noticias de prensa española. Tu trabajo es leer una noticia y extraer **2 a 5 claims atómicos**, idealmente verificables y mutuamente independientes.
@@ -132,16 +132,18 @@ class Claim(BaseModel):
 
 class ClaimsExtraction(BaseModel):
     razonamiento: str = Field(
+        default="Extraído automáticamente",
         description=(
             "1-3 frases explicando por qué elegiste estos claims y no otros. "
             "Sirve como auditoría humana del extractor."
-        )
+        ),
     )
     claims: list[Claim] = Field(
+        default_factory=list,
         description=(
             "Entre 0 y 5 claims atómicos extraídos de la noticia "
             "(2-5 es lo habitual; 0 si no hay nada factual sólido)."
-        )
+        ),
     )
 
 
@@ -149,8 +151,12 @@ SELECT_PENDING_SQL = """
 SELECT n.id, n.titular, n.descripcion, n.cuerpo, f.nombre AS fuente
 FROM prensa.noticias n
 JOIN prensa.fuentes f ON f.id = n.fuente_id
-WHERE NOT EXISTS (
-    SELECT 1 FROM prensa.claims c WHERE c.noticia_id = n.id
+WHERE (
+    (n.descripcion IS NOT NULL AND length(trim(n.descripcion)) > 20)
+    OR (n.cuerpo IS NOT NULL AND length(trim(n.cuerpo)) > 20)
+)
+AND NOT EXISTS (
+    SELECT 1 FROM prensa.extracciones_noticias en WHERE en.noticia_id = n.id
 )
 ORDER BY n.publicada_en DESC
 """
@@ -185,7 +191,13 @@ def build_user_message(n: dict[str, Any]) -> str:
 
 def extract(n: dict[str, Any]):
     raw, usage = generate_json(SYSTEM_PROMPT, build_user_message(n))
-    return ClaimsExtraction.model_validate_json(raw), usage
+    data = json.loads(raw)
+    if isinstance(data, list):
+        data = {"razonamiento": "Extraído automáticamente", "claims": data}
+    elif isinstance(data, dict):
+        if "claims" not in data and "afirmaciones" in data:
+            data["claims"] = data["afirmaciones"]
+    return ClaimsExtraction.model_validate(data), usage
 
 
 def main(limit: int | None = None) -> None:
@@ -243,6 +255,14 @@ def main(limit: int | None = None) -> None:
                                 ),
                             },
                         )
+                    cur.execute(
+                        """
+                        INSERT INTO prensa.extracciones_noticias (noticia_id, num_claims)
+                        VALUES (%s, %s)
+                        ON CONFLICT (noticia_id) DO UPDATE SET procesada_en = now(), num_claims = EXCLUDED.num_claims;
+                        """,
+                        (n["id"], len(extraction.claims)),
+                    )
                 conn.commit()
             except Exception as e:
                 conn.rollback()

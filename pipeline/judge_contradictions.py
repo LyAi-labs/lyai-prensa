@@ -26,6 +26,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -49,7 +50,7 @@ MAX_CANDIDATOS = 8  # candidatos que se le pasan al LLM tras filtrar
 
 # Ver SLEEP_ENTRE_LLAMADAS en extract_claims.py: mismo motivo (tier
 # gratuito de Gemini limitado a ~20 req/min, verificado 2026-09-29).
-SLEEP_ENTRE_LLAMADAS = 3.5
+SLEEP_ENTRE_LLAMADAS = 4.5
 
 CRITERIOS_PATH = Path(__file__).resolve().parent.parent / "docs" / "contradiccion-criterios.md"
 
@@ -72,8 +73,8 @@ def _load_system_prompt() -> str:
 class Veredicto(BaseModel):
     candidato_idx: int = Field(description="Índice 1-based del candidato evaluado")
     label: Literal["contradiccion", "coincidencia", "no_relacionado", "ambiguo"]
-    intensidad: float = Field(ge=0, le=1)
-    razonamiento: str = Field(description="1-2 frases justificando el label")
+    intensidad: float = Field(default=0.0, ge=0, le=1)
+    razonamiento: str = Field(default="", description="1-2 frases justificando el label")
     metadata_tipo: str | None = Field(
         default=None,
         description="'fuentes_oficiales' si aplica el caso límite documentado; null en cualquier otro caso.",
@@ -201,7 +202,34 @@ def judge(claim_fuente: dict[str, Any], candidatos: list[dict[str, Any]]):
         _load_system_prompt(),
         build_user_message(claim_fuente, candidatos),
     )
-    return JuicioClaim.model_validate_json(raw), usage
+    data = json.loads(raw)
+    if isinstance(data, list):
+        data = {"veredictos": data}
+    elif isinstance(data, dict) and "veredictos" not in data:
+        for val in data.values():
+            if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                data["veredictos"] = val
+                break
+
+    if isinstance(data, dict) and "veredictos" in data:
+        for v in data["veredictos"]:
+            if isinstance(v, dict):
+                if "razonamiento" not in v:
+                    v["razonamiento"] = (
+                        v.get("justificacion")
+                        or v.get("explicacion")
+                        or v.get("motivo")
+                        or v.get("reasoning")
+                        or ""
+                    )
+                if "intensidad" not in v:
+                    v["intensidad"] = 0.0
+                if "label" in v and v["label"] not in ("contradiccion", "coincidencia", "no_relacionado", "ambiguo"):
+                    # Normalizar pequeñas variaciones como 'contradicción' con tilde
+                    lbl = str(v["label"]).lower().replace("ó", "o")
+                    v["label"] = lbl if lbl in ("contradiccion", "coincidencia", "no_relacionado", "ambiguo") else "no_relacionado"
+
+    return JuicioClaim.model_validate(data), usage
 
 
 def main(limit: int | None = None) -> None:
