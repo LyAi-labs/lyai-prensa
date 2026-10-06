@@ -4,6 +4,7 @@ import Splash from './components/card/Splash'
 import TimelineView from './components/views/TimelineView'
 import { ViewSwitch } from './shared/components/view-switch'
 import DeploySwitch from './components/DeploySwitch'
+import InstallPrompt from './components/pwa/InstallPrompt'
 
 // Vista predeterminada: el muro 3D. La línea de tiempo es solo una opción
 // (selector arriba) y no se recuerda entre visitas.
@@ -25,6 +26,7 @@ export default function App() {
         ]}
       />
       <DeploySwitch />
+      <InstallPrompt />
       <Splash ready={ready} />
     </>
   )
