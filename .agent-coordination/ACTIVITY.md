@@ -24,3 +24,10 @@ que no se ven en tiempo real. Ver
     - Reconstruido y redesplegado contenedor de producción `lyai_prensa`.
   - **Verificado**: `curl -I https://prensa.lyai.es/manifest.webmanifest` (200, `application/manifest+json`), `curl -I https://prensa.lyai.es/sw.js` (200, `Service-Worker-Allowed: /`).
   - **Qué queda abierto**: Si se desea sincronizar estos cambios con la rama `feature/muro-v2-bento` desplegada en `/v2/`.
+
+- **2026-10-06 (update)** — Antigravity (AGY)
+  - **Qué se hizo**: Actualizado el flujo de instalación de PWA para que el aviso/modal de instalación se muestre **automáticamente en pantalla** (bottom-sheet en móvil, card modal centrada en desktop) nada más cargar la app, sin requerir que el usuario busque en el menú del navegador.
+  - **Detalles**:
+    - Dispara automáticamente la invitación con botón directo de instalación "Instalar ahora" (que ejecuta el prompt nativo del navegador con el gesto del clic) o guía interactiva en iOS.
+    - Respeta modo `isStandalone()` (oculto si ya está instalada).
+    - Reconstruido y desplegado en producción `lyai_prensa`.
