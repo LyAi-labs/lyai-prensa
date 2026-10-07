@@ -11,4 +11,6 @@ export * from "./separator"
 export * from "./BorderBeam"
 export * from "./floating-dock"
 export * from "./sheet"
+export * from "./comparison-03"
+export { default as Comparison03 } from "./comparison-03"
 
