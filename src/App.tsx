@@ -2,12 +2,10 @@ import { useCallback, useState } from 'react'
 import WallGL from './components/WallGL'
 import Splash from './components/card/Splash'
 import TimelineView from './components/views/TimelineView'
-import { ViewSwitch } from './shared/components/view-switch'
-import DeploySwitch from './components/DeploySwitch'
 import InstallPrompt from './components/pwa/InstallPrompt'
 
 // Vista predeterminada: el muro 3D. La línea de tiempo es solo una opción
-// (selector arriba) y no se recuerda entre visitas.
+// (selector en el FloatingDock superior) y no se recuerda entre visitas.
 type View = 'muro' | 'tiempo'
 
 export default function App() {
@@ -16,16 +14,11 @@ export default function App() {
   const [view, setView] = useState<View>('muro')
   return (
     <>
-      {view === 'muro' ? <WallGL key="muro" onReady={onReady} /> : <TimelineView key="tiempo" onReady={onReady} />}
-      <ViewSwitch
-        value={view}
-        onChange={setView}
-        options={[
-          { id: 'muro', label: 'Muro 3D', icon: 'grid' },
-          { id: 'tiempo', label: 'Línea de tiempo', icon: 'timeline' },
-        ]}
-      />
-      <DeploySwitch />
+      {view === 'muro' ? (
+        <WallGL key="muro" onReady={onReady} view={view} onViewChange={setView} />
+      ) : (
+        <TimelineView key="tiempo" onReady={onReady} view={view} onViewChange={setView} />
+      )}
       <InstallPrompt />
       <Splash ready={ready} />
     </>

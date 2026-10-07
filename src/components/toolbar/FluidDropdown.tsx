@@ -1,23 +1,24 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { ChevronDown } from 'lucide-react'
+import BorderBeam, { type BorderBeamColorVariant } from '../ui/BorderBeam'
+import './fluid-dropdown.css'
 
 export type DropdownOption = { id: string; label: string; dot?: string; count?: number }
 
-// Dropdown con resaltado deslizante entre opciones — portado del
-// `fluid-dropdown` de 21st.dev a motion/react (el proyecto ya lo trae; no
-// hace falta framer-motion) y sin Tailwind/shadcn. Ver dev-xplain
-// 2026-10-04-1745-prensa-toolbar-filtros-busqueda para el origen.
 export default function FluidDropdown({
   icon,
   labelPrefix,
   options,
   value,
+  variant = 'ocean',
   onChange,
 }: {
   icon: ReactNode
   labelPrefix: string
   options: DropdownOption[]
   value: string
+  variant?: BorderBeamColorVariant
   onChange: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -39,13 +40,23 @@ export default function FluidDropdown({
 
   return (
     <div className="fdrop" ref={rootRef}>
-      <button type="button" className="fdrop-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="ico" aria-hidden="true">{icon}</span>
-        <span>{labelPrefix}: <b>{selected?.label ?? 'Todas'}</b></span>
-        <svg className="chev" style={{ transform: open ? 'rotate(180deg)' : undefined }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
+      <BorderBeam size="sm" borderRadius={12} colorVariant={variant} className="tb-beam-item">
+        <button
+          type="button"
+          className="fdrop-btn"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+        >
+          <div className="fdrop-btn-content">
+            <span className="ico" aria-hidden="true">{icon}</span>
+            <span className="fdrop-btn-label">
+              <span className="prefix">{labelPrefix}:</span>
+              <b>{selected?.label ?? 'Todas'}</b>
+            </span>
+          </div>
+          <ChevronDown size={14} strokeWidth={2.4} className="chev" aria-hidden="true" />
+        </button>
+      </BorderBeam>
       <AnimatePresence>
         {open && (
           <motion.div
@@ -56,21 +67,26 @@ export default function FluidDropdown({
             transition={{ duration: 0.18 }}
           >
             <div className="fdrop-list" onMouseLeave={() => setHovered(null)}>
-              <motion.div
-                className="fdrop-hl"
-                animate={{ y: activeIdx * 36 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 34, mass: 1 }}
-              />
+              {activeIdx >= 0 && (
+                <motion.div
+                  className="fdrop-hl"
+                  animate={{ y: activeIdx * 34 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 34, mass: 1 }}
+                />
+              )}
               {options.map((o) => (
                 <button
                   key={o.id}
                   type="button"
                   className={`fdrop-item${o.id === value ? ' is-sel' : ''}`}
                   onMouseEnter={() => setHovered(o.id)}
-                  onClick={() => { onChange(o.id); setOpen(false) }}
+                  onClick={() => {
+                    onChange(o.id)
+                    setOpen(false)
+                  }}
                 >
                   {o.dot && <span className="dot" style={{ background: o.dot }} aria-hidden="true" />}
-                  <span>{o.label}</span>
+                  <span className="label-text">{o.label}</span>
                   {o.count !== undefined && <span className="n">{o.count}</span>}
                 </button>
               ))}

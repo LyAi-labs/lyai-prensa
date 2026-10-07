@@ -3,10 +3,10 @@
 
 .wall-toolbar-wrap {
   position: absolute;
-  top: 78px;
+  top: 76px;
   left: 32px;
-  z-index: 16;
-  max-width: 620px;
+  z-index: 40;
+  max-width: none;
 }
 
 .toolbar {
@@ -14,15 +14,32 @@
   z-index: 50; /* evita que el backdrop-filter atrape el panel del dropdown por debajo del muro */
   pointer-events: auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  padding: 8px;
-  border-radius: 14px;
-  background: rgba(10, 11, 15, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(10, 11, 15, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  width: fit-content;
+}
+
+.tb-beam-item {
+  display: inline-flex;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.tb-search-beam {
+  flex: 1 1 180px;
+  min-width: 150px;
+  display: flex;
+}
+
+.tb-search-beam .tb-search {
+  width: 100%;
 }
 
 .tb-search { position: relative; flex: 1 1 180px; min-width: 150px; }
@@ -75,6 +92,240 @@
 .fdrop-item .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
 .fdrop-item .n { margin-left: auto; font: 600 10px 'JetBrains Mono', ui-monospace, monospace; color: rgba(255, 255, 255, 0.35); }
 
+.toolbar-root {
+  position: relative;
+  width: fit-content;
+}
+
+.tb-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: rgba(255, 255, 255, 0.85);
+  font: 600 12.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+.tb-filter-trigger:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.tb-filter-trigger.is-open {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(0, 229, 255, 0.4);
+  color: #fff;
+}
+.tb-filter-trigger.has-active {
+  border-color: rgba(0, 229, 255, 0.5);
+  color: #00e5ff;
+}
+.tb-filter-trigger.is-contra-active {
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+}
+.tb-filter-ico {
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+  flex-shrink: 0;
+}
+.tb-filter-chev {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  opacity: 0.7;
+}
+.tb-filter-chev.is-open {
+  transform: rotate(180deg);
+}
+.tb-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #00e5ff;
+  color: #06080c;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+.tb-filter-badge.is-contra {
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+}
+
+/* ── Panel Desplegable de Filtros ───────────────────────────────── */
+.tb-dropdown-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 60;
+  min-width: 320px;
+  border-radius: 16px;
+  background: rgba(14, 17, 24, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tb-dropdown-panel.animate-in {
+  animation: tbDropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes tbDropdownFadeIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tb-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tb-dropdown-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tb-panel-ico {
+  width: 14px;
+  height: 14px;
+  color: #00e5ff;
+}
+.tb-dropdown-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+.tb-reset-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  padding: 2px 4px;
+}
+.tb-reset-btn:hover {
+  color: #f87171;
+}
+
+.tb-dropdown-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tb-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tb-dropdown-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.tb-dropdown-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 2px 0;
+}
+
+/* Fila interactiva para Solo Contradicciones */
+.tb-contra-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tb-contra-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.tb-contra-card.is-active {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+.tb-contra-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tb-contra-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tb-contra-icon-wrap svg {
+  width: 15px;
+  height: 15px;
+}
+.tb-contra-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tb-contra-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tb-contra-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+.tb-contra-badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.2;
+}
+.tb-contra-desc {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .tb-toggle {
   display: inline-flex; align-items: center; gap: 6px;
   background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px;
@@ -84,12 +335,118 @@
 .tb-toggle svg { width: 13px; height: 13px; }
 .tb-toggle.is-on { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.45); color: #fca5a5; }
 
+.tb-pill-indicator {
+  display: inline-flex;
+  align-items: center;
+  width: 28px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin-left: 4px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.tb-pill-indicator.is-on {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.tb-pill-indicator-thumb {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.6);
+  transform: translateX(0);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease;
+}
+
+.tb-pill-indicator.is-on .tb-pill-indicator-thumb {
+  transform: translateX(12px);
+  background: #fca5a5;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+}
+
 .tb-count { font-size: 10.5px; color: rgba(255, 255, 255, 0.45); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tb-count b { color: #fff; }
 
 @media (max-width: 760px) {
-  .wall-toolbar-wrap { left: 12px; right: 12px; top: 72px; max-width: none; }
-  .toolbar { gap: 6px; padding: 6px; }
-  .fdrop-btn, .tb-toggle { padding: 6px 9px; font-size: 11px; }
+  .wall-toolbar-wrap { left: 12px; right: 12px; top: 112px; max-width: none; }
+  .toolbar { flex-wrap: wrap; border-radius: 14px; gap: 6px; padding: 6px; width: 100%; }
+  .tb-search-beam { flex: 1 1 100%; }
+  .tb-filter-trigger { padding: 6px 10px; font-size: 11px; }
+  .tb-dropdown-panel { left: 0; right: 0; min-width: unset; width: 100%; }
   .tb-count { display: none; }
+}
+
+/* ── Light Theme Overrides ────────────────────────────────────────── */
+html.light .toolbar {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+html.light .tb-search input {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #0f172a;
+}
+html.light .tb-search input::placeholder {
+  color: #94a3b8;
+}
+html.light .tb-search input:focus {
+  border-color: rgba(14, 165, 233, 0.6);
+  background: rgba(0, 0, 0, 0.02);
+}
+html.light .tb-search svg {
+  color: #64748b;
+}
+html.light .fdrop-btn {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #1e293b;
+}
+html.light .fdrop-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+html.light .fdrop-btn b {
+  color: #0f172a;
+}
+html.light .fdrop-panel {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 20px 44px -16px rgba(0, 0, 0, 0.18);
+}
+html.light .fdrop-item {
+  color: #334155;
+}
+html.light .fdrop-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+html.light .fdrop-item.is-sel {
+  color: #0f172a;
+  background: rgba(0, 0, 0, 0.06);
+}
+html.light .fdrop-item .n {
+  color: #94a3b8;
+}
+html.light .tb-toggle {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #475569;
+}
+html.light .tb-pill-indicator {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+html.light .tb-pill-indicator-thumb {
+  background: #64748b;
+}
+html.light .tb-count {
+  color: #64748b;
+}
+html.light .tb-count b {
+  color: #0f172a;
 }

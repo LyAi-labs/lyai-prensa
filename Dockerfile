@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
+COPY tsconfig*.json vite.config.ts index.html tailwind.config.js postcss.config.js components.json ./
 COPY public ./public
 COPY src ./src
 ENV VITE_BASE=/
