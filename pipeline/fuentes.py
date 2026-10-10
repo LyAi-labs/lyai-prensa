@@ -784,6 +784,16 @@ FUENTES: list[Fuente] = [
 
     # === Prensa económica / financiera adicional ===
     {
+        "slug": "negocios-tv",
+        "nombre": "Negocios TV",
+        "rss_url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCwd8Byi93KbnsYmCcKLExvQ",
+        "web_url": "https://www.youtube.com/@NegociosTV",
+        "idioma": "es",
+        "pais": "ES",
+        "color": "#0f3b7d",
+        "sesgo": "centro",
+    },
+    {
         "slug": "el-economista",
         "nombre": "El Economista",
         "rss_url": "https://www.eleconomista.es/rss/rss-ultima-hora.php",
