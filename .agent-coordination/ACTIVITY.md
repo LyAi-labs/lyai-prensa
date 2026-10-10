@@ -150,3 +150,8 @@ que no se ven en tiempo real. Ver
   componente directamente (carga inicial + hashchange), Escape cierra, el hash se limpia al
   cerrar. Así se puede pasar el enlace de una ficha concreta a otro agente.
   Backup: index.html.bak-20261010-pre-deeplink.
+
+## 2026-10-10 (cont. 2) — Claude Code
+- Bug reportado por Ignacio: "Catálogo" en la miga de pan del panel lyai-shared parecía clicable
+  (estilo 21st.dev) pero era texto plano — no volvía a /panel/. Convertido en enlace real.
+  Backup: index.html.bak-20261010-pre-breadcrumb-link.
