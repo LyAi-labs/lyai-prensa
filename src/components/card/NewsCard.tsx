@@ -1,61 +1,61 @@
 import { memo, useRef, useState, type CSSProperties } from 'react'
 import type { NewsItem } from '../../data/newsApi'
-import { contraColor, dominio, fechaCorta, hash, hexToRgb, iniciales, legible } from './cardUtils'
+import { contraColor, detectSeccion, dominio, fechaCorta, hexToRgb, iniciales, legible } from './cardUtils'
+import MastheadLogo from './MastheadLogo'
 import { FlipCard } from '../../shared/components/flip-card'
-import { useDwell } from '../../shared/hooks/use-dwell'
+import { SpotlightCard, type SpotlightVariant } from '../../shared/components/spotlight-card'
 import './card.css'
 
-// Alturas de banner por card — da ritmo de "mampostería" sin depender de que
-// la noticia tenga foto.
-const BANNER_H = [112, 148, 184]
+function getSpotlightVariant(source: string, isContra: boolean): SpotlightVariant {
+  if (isContra) return 'rose'
+  const s = source.toLowerCase()
+  if (s.includes('país') || s.includes('pais') || s.includes('ser')) return 'blue'
+  if (s.includes('mundo') || s.includes('abc') || s.includes('confidencial')) return 'amber'
+  if (s.includes('diario') || s.includes('vanguardia')) return 'emerald'
+  if (s.includes('rtve') || s.includes('onda') || s.includes('cope')) return 'cyan'
+  return 'blue'
+}
 
 type Props = {
   item: NewsItem
   flipped: boolean
   onToggle: (id: string) => void
   contrarioEnlace?: string
-  // Peek (hoja con el resumen completo). Si se pasa, lo controla el padre y la
-  // card NO escucha «parar» por su cuenta (overlay del muro WebGL); si no, la
-  // card detecta ratón quieto / dedo mantenido (rejilla DOM).
-  peek?: boolean
-  onPeekChange?: (id: string, peek: boolean) => void
   // Etiqueta «× N medios cuentan esto» sobre la card (misma historia).
   storyCount?: number
   // Rejilla DOM: estado de la card cuando otra está en «misma historia».
   storyState?: 'origin' | 'same' | 'dim' | null
   // Otros medios que cuentan la misma historia (se listan en el reverso).
   related?: NewsItem[]
+  onOpenComparison?: () => void
 }
 
-function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, onPeekChange, storyCount, storyState, related }: Props) {
+function NewsCard({
+  item,
+  flipped,
+  onToggle,
+  contrarioEnlace,
+  storyCount,
+  storyState,
+  related,
+  onOpenComparison,
+}: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
-  const [peekInternal, setPeekInternal] = useState(false)
-
-  const controlled = peekProp !== undefined
-  const peek = (controlled ? peekProp : peekInternal) && !flipped
-
-  const { consumeTouchClick } = useDwell(rootRef, {
-    enabled: !controlled && !flipped,
-    onDwell: () => {
-      setPeekInternal(true)
-      onPeekChange?.(item.id, true)
-    },
-    onEnd: () => {
-      setPeekInternal(false)
-      onPeekChange?.(item.id, false)
-    },
-  })
 
   const contra = item.contradicciones[0]
   const cColor = contra ? contraColor(contra.intensidad) : null
+  const spotVariant = getSpotlightVariant(item.source, !!contra)
+  // Bordes neutros naturales para tarjetas normales, reservando el color para contradicciones
+  const spotRgb = (contra && cColor) ? (hexToRgb(cColor) ?? undefined) : '225, 231, 239'
   const { dia, hora } = fechaCorta(item.publishedAt)
   const ini = iniciales(item.source)
-  const bannerH = BANNER_H[hash(item.id) % BANNER_H.length]
   const hasPhoto = !!item.imagenUrl && !imgFailed
+  const proxyUrl = item.imagenUrl ? `/api/image-proxy?url=${encodeURIComponent(item.imagenUrl)}` : null
+  const seccion = detectSeccion(item.enlace, item.source, item.headline)
 
-  const backPhoto = hasPhoto ? (
-    <img className="pc-back-photo" src={item.imagenUrl!} alt="" referrerPolicy="no-referrer" draggable={false} />
+  const backPhoto = hasPhoto && proxyUrl ? (
+    <img className="pc-back-photo" src={proxyUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
   ) : null
 
   const others = related?.filter((r) => r.id !== item.id) ?? []
@@ -84,31 +84,29 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
 
   const style = {
     '--c': item.sourceColor,
-    '--c-rgb': hexToRgb(cColor ?? item.sourceColor),
+    '--c-rgb': (contra && cColor) ? (hexToRgb(cColor) ?? '225, 231, 239') : '225, 231, 239',
     '--c-text': legible(item.sourceColor),
     '--contra': cColor ?? 'transparent',
-    '--banner-h': `${bannerH}px`,
-    // Profundidad con la que sale del plano en la rejilla 3D (más intensidad, más Z).
     '--pop': `${Math.round(40 + (contra?.intensidad ?? 0) * 70)}px`,
   } as CSSProperties
 
   return (
     <FlipCard
       rootRef={rootRef}
-      className={`pc${contra ? ' pc-has-contra' : ''}${peek ? ' is-peek' : ''}${storyState ? ` is-${storyState}` : ''}`}
+      className={`pc${contra ? ' pc-has-contra' : ''}${storyState ? ` is-${storyState}` : ''}${!hasPhoto ? ' pc-is-newspaper' : ''}`}
       style={style}
       flipped={flipped}
       onFlippedChange={() => onToggle(item.id)}
-      shouldIgnoreClick={consumeTouchClick}
       ariaLabel={`${item.source}: ${item.headline}`}
       frontClassName="pc-face pc-front"
       backClassName="pc-face pc-back"
       front={
-        <>
-            <div className="pc-banner" style={{ height: bannerH }}>
-              {hasPhoto ? (
+        <SpotlightCard variant={contra ? spotVariant : 'blue'} rgb={spotRgb} className={`pc-spotlight${!hasPhoto ? ' pc-spotlight-paper' : ''}`}>
+          {hasPhoto ? (
+            <>
+              <div className="pc-banner pc-banner-hero">
                 <img
-                  src={item.imagenUrl!}
+                  src={proxyUrl!}
                   alt=""
                   loading="lazy"
                   decoding="async"
@@ -116,70 +114,105 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
                   draggable={false}
                   onError={() => setImgFailed(true)}
                 />
-              ) : (
-                <span className="pc-mark" aria-hidden="true">{ini}</span>
-              )}
-              <span className="pc-chip">
-                <i />
-                {item.source}
-              </span>
-              {hasPhoto && <span className="pc-photo-tag">FOTO</span>}
-            </div>
-
-            <div className="pc-body">
-              <h3 className="pc-title">{item.headline}</h3>
-              {item.summary && <p className="pc-sum">{item.summary}</p>}
-            </div>
-
-            <div className="pc-foot">
-              <span className="pc-avatar" aria-hidden="true">{ini}</span>
-              <span className="pc-meta">
-                <b>{item.source}</b>
-                <small>{dia}{hora && ` · ${hora}`}</small>
-              </span>
-              <span className="pc-go" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M13 6l6 6-6 6" />
-                </svg>
-              </span>
-            </div>
-
-            {storyState === 'same' && <span className="pc-same-chip">misma historia</span>}
-
-            {contra && (
-              <div className="pc-contra-bar">
-                <span>⚠ Contradice a {contra.fuenteContraria}</span>
-                <b>{contra.intensidad.toFixed(1)}</b>
+                <span className="pc-chip">
+                  <i />
+                  {item.source}
+                </span>
               </div>
-            )}
 
-            {/* Peek: resumen completo y acciones. */}
-            <div className="peek-sheet" aria-hidden={!peek}>
-              <div className="peek-full">{item.summary || item.headline}</div>
-              <div className="peek-acts">
-                {item.enlace && (
-                  <a href={item.enlace} target="_blank" rel="noreferrer" tabIndex={peek ? 0 : -1} onClick={(e) => e.stopPropagation()}>
-                    Leer ↗
+              <div className="pc-body">
+                <h3 className="pc-title">{item.headline}</h3>
+                {item.summary && <p className="pc-sum">{item.summary}</p>}
+              </div>
+
+              <div className="pc-foot">
+                <span className="pc-avatar" aria-hidden="true">{ini}</span>
+                <span className="pc-meta">
+                  <b>{item.source}</b>
+                  <small>{dia}{hora && ` · ${hora}`}</small>
+                </span>
+                <span className="pc-go" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="pc-paper-container">
+              <div className="pc-paper-top">
+                <div className="pc-paper-pill">
+                  <span className="pc-paper-pill-dot" style={{ background: item.sourceColor || '#22c55e' }} />
+                  <span className="pc-paper-pill-text">{item.source.toUpperCase()}</span>
+                </div>
+              </div>
+
+              <div className="pc-paper-sheet">
+                <div className="pc-paper-masthead">
+                  <MastheadLogo source={item.source} sourceColor={item.sourceColor} />
+                </div>
+
+                <div className="pc-paper-divider" />
+
+                <div className={`pc-paper-section${seccion.isRed ? ' is-red' : ''}`}>
+                  {seccion.text}
+                </div>
+
+                <div className="pc-paper-body">
+                  <h3 className="pc-paper-headline">{item.headline}</h3>
+                  {item.summary && <p className="pc-paper-summary">{item.summary}</p>}
+                </div>
+
+                <div className="pc-paper-foot">
+                  <div className="pc-paper-foot-left">
+                    <span className="pc-paper-avatar" style={{ background: item.sourceColor || '#0284c7' }}>
+                      {ini}
+                    </span>
+                    <span className="pc-paper-meta-inline">
+                      <b className="pc-paper-source">{item.source}</b>
+                      <span className="pc-paper-sep">·</span>
+                      <span className="pc-paper-date">{dia}{hora && ` · ${hora}`}</span>
+                    </span>
+                  </div>
+                  <a
+                    className="pc-paper-go"
+                    href={item.enlace || undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Leer noticia original"
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
                   </a>
-                )}
-                <button
-                  type="button"
-                  tabIndex={peek ? 0 : -1}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToggle(item.id)
-                  }}
-                >
-                  Girar ↻
-                </button>
+                </div>
               </div>
             </div>
-        </>
+          )}
+
+          {storyState === 'same' && <span className="pc-same-chip">misma historia</span>}
+
+          {contra && (
+            <div className="pc-contra-bar">
+              <span>⚠ Contradice a {contra.fuenteContraria}</span>
+              <b>{contra.intensidad.toFixed(1)}</b>
+            </div>
+          )}
+        </SpotlightCard>
       }
       back={
-        <>
+        <div className="pc-spotlight pc-back-inner">
             {contra ? (
-              <div className="pc-back-scroll">
+              <div
+                className="pc-back-scroll"
+                onClick={(e) => {
+                  const target = e.target as HTMLElement
+                  if (target.closest('a')) return
+                  e.stopPropagation()
+                  onOpenComparison?.()
+                }}
+              >
                 {backPhoto}
                 <div className="pc-hl-icon" style={{ background: `linear-gradient(135deg, ${cColor}, ${cColor}99)` }}>
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -225,6 +258,24 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
                     </a>
                   )}
                 </div>
+                {contra && (
+                  <div className="pc-compare-trigger-group">
+                    <button
+                      type="button"
+                      className="pc-compare-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onOpenComparison?.()
+                      }}
+                    >
+                      <span className="pc-compare-btn-badge">2º Click</span>
+                      <span>⚔ Comparar ambas versiones cara a cara</span>
+                    </button>
+                    <span className="pc-compare-hint">
+                      Haz un 2º click en esta tarjeta para salir del muro
+                    </span>
+                  </div>
+                )}
                 {relatedList}
               </div>
             ) : (
@@ -238,17 +289,47 @@ function NewsCard({ item, flipped, onToggle, contrarioEnlace, peek: peekProp, on
                   </span>
                 </div>
                 <h4 className="pc-back-title">{item.headline}</h4>
-                {item.summary && <p className="pc-full">{item.summary}</p>}
+                {item.summary ? (
+                  <p className="pc-full">{item.summary}</p>
+                ) : (
+                  <div className="pc-dossier-box">
+                    <div className="pc-dossier-header">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <polyline points="9 12 11 14 15 10" />
+                      </svg>
+                      <span>Análisis LyAi · Cobertura contrastada</span>
+                    </div>
+                    <p className="pc-dossier-text">
+                      Información analizada y contrastada en tiempo real. No se han detectado contradicciones fácticas ni discrepancias con otros medios sobre esta información.
+                    </p>
+                    <div className="pc-dossier-meta">
+                      <span><b>Medio:</b> {item.source}</span>
+                      <span><b>Captura:</b> {dia} {hora ? `· ${hora}` : ''}</span>
+                    </div>
+                  </div>
+                )}
                 {item.enlace && (
-                  <a className="pc-readmore" href={item.enlace} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                    ↗ {dominio(item.enlace)} — leer noticia original
+                  <a
+                    className="pc-read-btn"
+                    href={item.enlace}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span>Leer noticia completa en {dominio(item.enlace) || item.source}</span>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
                   </a>
                 )}
                 {relatedList}
               </div>
             )}
             <span className="pc-back-hint">click para volver</span>
-        </>
+        </div>
       }
       overlay={
         <>

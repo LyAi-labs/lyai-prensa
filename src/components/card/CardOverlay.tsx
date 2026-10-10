@@ -20,16 +20,18 @@ export default function CardOverlay({
   state,
   onToggle,
   onClose,
+  onOpenComparison,
 }: {
   state: OverlayState
   onToggle: () => void
   onClose: () => void
+  onOpenComparison?: () => void
 }) {
   return (
     <AnchoredOverlay
       cx={state.cx}
       cy={state.cy}
-      modal={state.flipped}
+      modal={state.flipped || state.sticky}
       sticky={state.sticky}
       onClose={onClose}
       contentKey={state.item.id}
@@ -43,9 +45,12 @@ export default function CardOverlay({
             onToggle()
           }}
           contrarioEnlace={state.contrarioEnlace}
-          peek
           storyCount={state.storyCount}
           related={state.related}
+          onOpenComparison={() => {
+            if (shouldIgnoreClick()) return
+            onOpenComparison?.()
+          }}
         />
       )}
     </AnchoredOverlay>

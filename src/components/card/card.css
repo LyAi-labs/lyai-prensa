@@ -1092,6 +1092,8 @@ html.light .peek-sheet { background: linear-gradient(180deg, #ffffff, #f1f5f9); 
   position: relative;
   width: 100%;
   max-width: 1140px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   margin: auto;
   border-radius: 24px;
   background: #0b0f19;
@@ -1182,6 +1184,78 @@ html.light .peek-sheet { background: linear-gradient(180deg, #ffffff, #f1f5f9); 
   flex-direction: column !important;
   width: 100% !important;
   height: 100% !important;
+}
+
+/* ── Grupo N-way (3+ noticias en contradicción) ── */
+.pc-popout-nway {
+  position: relative;
+}
+
+.pc-popout-nway-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+.pc-popout-nway-bento-wrap {
+  position: relative;
+  height: 560px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* .ls-bento-scroll (lyai-shared) ya fija --ls-bento-h/--ls-bento-col en sí
+   misma — una variable heredada del wrapper no la pisa, hace falta esta
+   misma clase con más especificidad para sobrescribirla. */
+.pc-popout-nway-bento-wrap .ls-bento-scroll {
+  --ls-bento-h: 560px;
+  --ls-bento-col: 400px;
+}
+
+/* Escritorio (ratón + pantalla ancha): panel y tarjetas más grandes — en
+   móvil el espacio es el límite, en PC sobra para verlas más cómodas. */
+@media (pointer: fine) and (min-width: 1024px) {
+  .pc-popout-window {
+    max-width: 1440px;
+  }
+
+  .pc-popout-nway-bento-wrap {
+    height: 680px;
+  }
+
+  .pc-popout-nway-bento-wrap .ls-bento-scroll {
+    --ls-bento-h: 680px;
+    --ls-bento-col: 460px;
+  }
+}
+
+.pc-popout-nway-tile {
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+}
+
+.pc-popout-nway-tile > div {
+  height: 100%;
+}
+
+.pc-popout-nway-intensity-row {
+  display: flex;
+}
+
+.pc-popout-nway-intensity {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid currentColor;
 }
 
 /* ── Columna Central VS ── */
@@ -1314,6 +1388,10 @@ html.light .peek-sheet { background: linear-gradient(180deg, #ffffff, #f1f5f9); 
   letter-spacing: 0.02em;
   color: #fff;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pc-fact-beacon-badge {
@@ -1326,6 +1404,8 @@ html.light .peek-sheet { background: linear-gradient(180deg, #ffffff, #f1f5f9); 
   background: rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.15);
+  flex: none;
+  white-space: nowrap;
 }
 
 .pc-fact-beacon-claim {

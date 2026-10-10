@@ -24,6 +24,7 @@ export function legible(hex: string, t = 0.5): string {
 const ARTICULOS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y'])
 
 export function iniciales(nombre: string): string {
+  if (nombre.toLowerCase() === 'abc') return 'abc'
   const palabras = nombre
     .replace(/\(.*?\)/g, '')
     .split(/[\s.]+/)
@@ -64,4 +65,163 @@ export function storyKey(headline: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
+}
+
+// Descompone el nombre del medio en cabecera principal y subtítulo (ej: "LA VERDAD" y "DE MURCIA")
+export function parseMasthead(source: string): { main: string; sub: string } {
+  const m = source.match(/^(.+?)(?:\s+(?:de|del|-|\()\s*(.+?)\)?$)/i)
+  if (m) {
+    const main = m[1].trim().toUpperCase()
+    const rawSub = m[2].trim().replace(/\)$/, '').toUpperCase()
+    let sub = rawSub
+    if (!source.includes('(') && !source.includes('-')) {
+      sub = (source.toLowerCase().includes(' del ') ? 'DEL ' : 'DE ') + rawSub
+    }
+    return { main, sub }
+  }
+  return { main: source.toUpperCase(), sub: '' }
+}
+
+export type SeccionInfo = {
+  text: string
+  isRed?: boolean
+}
+
+export function detectSeccion(enlace: string = '', source: string = '', headline: string = ''): SeccionInfo {
+  const url = (enlace || '').toLowerCase()
+  const head = (headline || '').toLowerCase()
+  const src = (source || '').toLowerCase()
+
+  // Deportes (rojo si es ABC, como en el mockup)
+  if (
+    url.includes('/deportes') ||
+    url.includes('/deporte') ||
+    url.includes('/futbol') ||
+    url.includes('/baloncesto') ||
+    head.includes('copa del rey') ||
+    head.includes('champions') ||
+    head.includes('nations league') ||
+    head.includes('fútbol') ||
+    head.includes('partido') ||
+    head.includes('derbi') ||
+    src.includes('marca') ||
+    src.includes('as') ||
+    src.includes('sport') ||
+    src.includes('mundo deportivo')
+  ) {
+    return { text: 'DEPORTES', isRed: src.includes('abc') }
+  }
+
+  // Cultura
+  if (
+    url.includes('/cultura') ||
+    url.includes('/libros') ||
+    url.includes('/ocio') ||
+    head.includes('libro') ||
+    head.includes('escritor') ||
+    head.includes('novela') ||
+    head.includes('poesía') ||
+    head.includes('museo') ||
+    head.includes('teatro') ||
+    head.includes('cine') ||
+    (head.includes('premio') && (head.includes('liter') || head.includes('novela')))
+  ) {
+    return { text: 'CULTURA' }
+  }
+
+  // Sociedad / Gala
+  if (
+    url.includes('/sociedad') ||
+    url.includes('/gala') ||
+    url.includes('/gente') ||
+    url.includes('/sucesos') ||
+    head.includes('gala') ||
+    head.includes('premios')
+  ) {
+    return { text: head.includes('gala') ? 'SOCIEDAD / GALA' : 'SOCIEDAD' }
+  }
+
+  // Política / Regional
+  if (
+    url.includes('/politica') ||
+    url.includes('/espana') ||
+    head.includes('partidos') ||
+    head.includes('elecciones') ||
+    head.includes('gobierno') ||
+    head.includes('candidaturas') ||
+    head.includes('congreso') ||
+    head.includes('senado') ||
+    head.includes('ministr') ||
+    head.includes('sánchez') ||
+    head.includes('feijóo') ||
+    head.includes('voto')
+  ) {
+    if (
+      src.includes('murcia') ||
+      src.includes('asturias') ||
+      src.includes('castilla') ||
+      src.includes('galicia') ||
+      src.includes('andalucía') ||
+      src.includes('sevilla') ||
+      src.includes('comercio') ||
+      src.includes('verdad') ||
+      src.includes('norte')
+    ) {
+      return { text: 'POLÍTICA / REGIONAL' }
+    }
+    return { text: 'POLÍTICA' }
+  }
+
+  // Economía
+  if (
+    src.includes('negocios') ||
+    url.includes('/economia') ||
+    url.includes('/empresas') ||
+    url.includes('/finanzas') ||
+    url.includes('/cincodias') ||
+    head.includes('pib') ||
+    head.includes('inflación') ||
+    head.includes('empleo') ||
+    head.includes('bolsa') ||
+    head.includes('ibex') ||
+    head.includes('cripto') ||
+    head.includes('bitcoin')
+  ) {
+    return { text: 'ECONOMÍA' }
+  }
+
+  // Internacional
+  if (url.includes('/internacional') || url.includes('/mundo') || head.includes('ucrania') || head.includes('eeuu') || head.includes('gaza')) {
+    return { text: 'INTERNACIONAL' }
+  }
+
+  // Tecnología
+  if (url.includes('/tecnologia') || url.includes('/ciencia') || head.includes('inteligencia artificial') || head.includes('apple') || head.includes('google')) {
+    return { text: 'TECNOLOGÍA' }
+  }
+
+  // Opinión
+  if (url.includes('/opinion') || url.includes('/editorial') || url.includes('/columnas') || url.includes('/tribuna')) {
+    return { text: 'OPINIÓN' }
+  }
+
+  // Regional por cabecera
+  if (
+    src.includes('murcia') ||
+    src.includes('asturias') ||
+    src.includes('castilla') ||
+    src.includes('sevilla') ||
+    src.includes('málaga') ||
+    src.includes('cádiz') ||
+    src.includes('córdoba') ||
+    src.includes('granada') ||
+    src.includes('huelva') ||
+    src.includes('norte') ||
+    src.includes('comercio') ||
+    src.includes('verdad')
+  ) {
+    return { text: 'ACTUALIDAD REGIONAL' }
+  }
+
+  return { text: 'ACTUALIDAD' }
 }

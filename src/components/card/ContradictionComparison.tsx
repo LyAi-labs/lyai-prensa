@@ -19,6 +19,7 @@ import { SpotlightCard } from '../../shared/components/spotlight-card'
 import { BorderBeam } from '../ui/BorderBeam'
 import { Badge } from '@/components/ui/badge'
 import { Comparison03 } from '../ui/comparison-03'
+import { DragBento, BentoTile } from '../../shared/components/drag-bento'
 
 export interface ContradictionComparisonProps {
   item: NewsItem
@@ -208,6 +209,7 @@ function PopoutCardItem({
   accentColor,
   targetEnlace,
   defaultSource,
+  intensidad,
 }: {
   item?: NewsItem
   claim?: Claim | null
@@ -216,6 +218,8 @@ function PopoutCardItem({
   accentColor: string
   targetEnlace?: string
   defaultSource?: string
+  /** Si se pasa, añade un pill "N%" junto al de «Dato en cuestión» (grupos N-way). */
+  intensidad?: number
 }) {
   const [imgFailed, setImgFailed] = useState(false)
   const sourceName = item?.source || defaultSource || (isOpposite ? 'Medio opuesto' : 'Medio fuente')
@@ -254,6 +258,15 @@ function PopoutCardItem({
           </span>
           <span className="pc-fact-beacon-badge">Dato en cuestión</span>
         </div>
+
+        {intensidad != null && (
+          <div className="pc-popout-nway-intensity-row">
+            <span className="pc-popout-nway-intensity" style={{ color: contraColor(intensidad) }}>
+              <RiAlertLine className="size-3" />
+              Intensidad {(intensidad * 100).toFixed(0)}%
+            </span>
+          </div>
+        )}
 
         <div className="pc-fact-beacon-claim">
           <span className="pc-fact-beacon-subject">{safeClaim.sujeto}</span>{' '}
@@ -351,7 +364,35 @@ export default function ContradictionComparison({
   onClose,
 }: ContradictionComparisonProps) {
   const [contrarioItem, setContrarioItem] = useState<NewsItem | undefined>(initialContrarioItem)
-  const [viewMode, setViewMode] = useState<'comparison03' | 'cards'>('comparison03')
+
+  // Grupo completo de contradicciones de `item` (puede implicar >2 noticias:
+  // cada entrada es un par item↔otra noticia — ver api/queries.py). Con más
+  // de una, «Tarjetas 3D» las muestra todas en vez de solo A-vs-B.
+  const allContras = item.contradicciones && item.contradicciones.length > 1 ? item.contradicciones : [contra]
+  // «Comparativa 03» solo puede mostrar UN par (2 columnas) — con 3+ noticias
+  // implicadas, abrir ahí por defecto esconde el resto sin que el usuario
+  // sepa que falta darle a «Tarjetas 3D». Con grupo N-way, arranca ya ahí.
+  const [viewMode, setViewMode] = useState<'comparison03' | 'cards'>(
+    allContras.length > 1 ? 'cards' : 'comparison03',
+  )
+  const [contrariosMap, setContrariosMap] = useState<Record<string, NewsItem>>({})
+
+  useEffect(() => {
+    if (allContras.length <= 1) return
+    let isSubscribed = true
+    allContras.forEach((c) => {
+      if (contrariosMap[c.noticiaContrariaId]) return
+      fetchNoticiaById(c.noticiaContrariaId).then((fetched) => {
+        if (isSubscribed && fetched) {
+          setContrariosMap((prev) => ({ ...prev, [c.noticiaContrariaId]: fetched }))
+        }
+      })
+    })
+    return () => {
+      isSubscribed = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id])
 
   useEffect(() => {
     document.body.classList.add('has-contradiction-popout')
@@ -497,6 +538,50 @@ export default function ContradictionComparison({
                 actionHref={targetEnlaceB}
                 compact={true}
               />
+            </div>
+          ) : allContras.length > 1 ? (
+            /* Grupo N-way: todas las noticias implicadas, en una fila arrastrable
+               (DragBento de lyai-shared) — sin un único VS, cada tarjeta lleva su
+               propio claim resaltado y badge de intensidad frente a `item`. */
+            <div className="pc-popout-nway">
+              <p className="pc-popout-nway-hint">
+                {allContras.length} noticias en contradicción sobre este dato — arrastra para ver todas
+              </p>
+              <div className="pc-popout-nway-bento-wrap">
+              <DragBento rows={1}>
+                <BentoTile span="tall" accentRgb={hexToRgb(colorA) ?? undefined} className="pc-popout-nway-tile">
+                  <SpotlightCard variant="blue" rgb={hexToRgb(colorA)} className="h-full rounded-[18px]">
+                    <PopoutCardItem item={item} claim={allContras[0]?.claimPropio} tokens={tokensA} accentColor={colorA} />
+                  </SpotlightCard>
+                </BentoTile>
+                {allContras.map((c) => {
+                  const cItem = contrariosMap[c.noticiaContrariaId]
+                  const cColor = cItem?.sourceColor || '#e11d48'
+                  const cTokens = extractKeyTokens(c.claimContrario)
+                  return (
+                    <BentoTile
+                      key={c.id}
+                      span="tall"
+                      accentRgb={hexToRgb(cColor) ?? undefined}
+                      className="pc-popout-nway-tile"
+                    >
+                      <SpotlightCard variant="rose" rgb={hexToRgb(cColor)} className="h-full rounded-[18px]">
+                        <PopoutCardItem
+                          item={cItem}
+                          claim={c.claimContrario}
+                          tokens={cTokens}
+                          isOpposite
+                          accentColor={cColor}
+                          targetEnlace={cItem?.enlace}
+                          defaultSource={c.fuenteContraria}
+                          intensidad={c.intensidad}
+                        />
+                      </SpotlightCard>
+                    </BentoTile>
+                  )
+                })}
+              </DragBento>
+              </div>
             </div>
           ) : (
             /* Grid Principal de Tarjetas 3D: Tarjeta A · VS Columna · Tarjeta B */
