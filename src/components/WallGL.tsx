@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import gsap from 'gsap'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { generateSampleNews, type NewsItem as MockNewsItem } from '../data/sampleNews'
-import { fetchDiasContradiccion, fetchNoticias, fetchNoticiasCount, type NewsFilters, type NewsItem } from '../data/newsApi'
+import { fetchNoticias, fetchNoticiasCount, type Contradiccion, type NewsFilters, type NewsItem } from '../data/newsApi'
 import CardOverlay, { type OverlayState } from './card/CardOverlay'
-import { contraColor, fechaCorta, iniciales, legible, storyKey } from './card/cardUtils'
-import Toolbar from './toolbar/Toolbar'
+import ContradictionComparison from './card/ContradictionComparison'
+import { contraColor, detectSeccion, fechaCorta, iniciales, parseMasthead, storyKey } from './card/cardUtils'
+import HeaderDock from './toolbar/HeaderDock'
 import './Wall.css'
 
 const ROWS = 3
@@ -42,9 +44,7 @@ const JUMP_DOLLY_Z = 900
 const JUMP_EXIT_DURATION = 0.28
 const JUMP_ENTER_DURATION = 0.55
 
-// 2 se quedaba corto al hacer zoom (Ctrl+rueda acerca la cámara hasta
-// CAM_Z+ZOOM_MIN = 550, ~2.7x más cerca que la distancia por defecto) — la
-// textura de 520x340px se magnificaba y se veía borrosa. 4 da margen de sobra.
+// Textura 4x para nitidez Retina y zoom sin pixelado
 const TEX_SCALE = 4
 
 // Contradicciones: salen del plano (eje Z) tanto más cuanto más intensas, con
@@ -67,9 +67,7 @@ const STORY_DIM = 0.32
 
 const CONTRA_STRIP_H = 24
 
-// Trunca con "…" si no cabe en maxWidth, en vez de dejar que se solape con
-// lo que venga al lado — antes "EL DIARIO MONTAÑÉS (CANTABRIA)" se comía la
-// hora porque el nombre no tenía límite de ancho.
+// Trunca con "…" si no cabe en maxWidth
 function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text
   let lo = 0
@@ -92,126 +90,475 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.closePath()
 }
 
-const FONT = 'system-ui, -apple-system, sans-serif'
+const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+const SERIF_FONT = "'Playfair Display', Georgia, Cambria, 'Times New Roman', serif"
+const BODONI_FONT = "'Bodoni Moda', 'Playfair Display', Georgia, serif"
 
-// Cara «editorial» (dev-xplain 2026-10-02-1737, opción A): barra lateral con
-// el color del medio, nombre en blanco (los colores de medio tienen contraste
-// 1,8–3,9 sobre este fondo), borde neutro — el rojo/ámbar queda reservado a
-// las contradicciones — y, si no hay resumen, el titular crece.
-function drawCard(item: NewsItem): HTMLCanvasElement {
-  const c = document.createElement('canvas')
-  c.width = TILE_W * TEX_SCALE
-  c.height = TILE_H * TEX_SCALE
+// Caché en memoria para evitar peticiones repetidas al proxy de imágenes
+const imageCache = new Map<string, HTMLImageElement | null>()
+const pendingImageCbs = new Map<string, Array<(img: HTMLImageElement) => void>>()
+
+function loadCardImage(url: string, onLoaded: (img: HTMLImageElement) => void) {
+  if (!url) return
+  if (imageCache.has(url)) {
+    const cached = imageCache.get(url)
+    if (cached) onLoaded(cached)
+    return
+  }
+  const pending = pendingImageCbs.get(url)
+  if (pending) {
+    pending.push(onLoaded)
+    return
+  }
+  pendingImageCbs.set(url, [onLoaded])
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => {
+    imageCache.set(url, img)
+    const cbs = pendingImageCbs.get(url) || []
+    pendingImageCbs.delete(url)
+    cbs.forEach((cb) => cb(img))
+  }
+  img.onerror = () => {
+    imageCache.set(url, null)
+    pendingImageCbs.delete(url)
+  }
+  img.src = `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
+
+function drawImageCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
+  const imgRatio = img.naturalWidth / img.naturalHeight
+  const targetRatio = w / h
+  let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight
+  if (imgRatio > targetRatio) {
+    sw = img.naturalHeight * targetRatio
+    sx = (img.naturalWidth - sw) / 2
+  } else {
+    sh = img.naturalWidth / targetRatio
+    sy = (img.naturalHeight - sh) / 2
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h)
+}
+
+function drawCanvasMasthead(ctx: CanvasRenderingContext2D, source: string, cx: number, topY: number, maxW: number) {
+  const s = source.toLowerCase()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+
+  // 1. La Verdad de Murcia
+  if (s.includes('verdad') && s.includes('murcia')) {
+    ctx.font = `800 13px ${SERIF_FONT}`
+    ctx.fillStyle = '#0f172a'
+    ctx.fillText('LA VERDAD', cx, topY + 11)
+    ctx.font = `700 6px ${FONT}`
+    ctx.fillStyle = '#64748b'
+    ctx.fillText('DE MURCIA', cx, topY + 18)
+    return
+  }
+
+  // 2. El Comercio (Asturias)
+  if (s.includes('comercio')) {
+    ctx.font = `800 13px ${SERIF_FONT}`
+    ctx.fillStyle = '#002f6c'
+    ctx.fillText('EL COMERCIO', cx, topY + 11)
+    const barW = 32
+    ctx.fillStyle = '#dc2626'
+    ctx.fillRect(cx - barW / 2, topY + 14, barW / 2, 1.5)
+    ctx.fillStyle = '#002f6c'
+    ctx.fillRect(cx, topY + 14, barW / 2, 1.5)
+    return
+  }
+
+  // 3. El Norte de Castilla
+  if (s.includes('norte') && s.includes('castilla')) {
+    ctx.font = `italic 700 13px ${SERIF_FONT}`
+    ctx.fillStyle = '#6d1d24'
+    ctx.fillText('El Norte', cx, topY + 10)
+    ctx.font = `700 6px ${FONT}`
+    ctx.fillStyle = '#0f172a'
+    ctx.fillText('DE CASTILLA', cx, topY + 17)
+    return
+  }
+
+  // 4. ABC
+  if (s === 'abc' || s.startsWith('abc')) {
+    ctx.font = `900 22px ${BODONI_FONT}`
+    ctx.fillStyle = '#111827'
+    ctx.fillText('AB', cx - 7, topY + 17)
+    ctx.fillStyle = '#dc2626'
+    ctx.fillText('C', cx + 11, topY + 17)
+    return
+  }
+
+  // 5. El País
+  if (s.includes('país') || s.includes('pais')) {
+    ctx.font = `800 13.5px ${SERIF_FONT}`
+    ctx.fillStyle = '#111827'
+    ctx.fillText('EL PAÍS', cx, topY + 14)
+    return
+  }
+
+  // 6. El Mundo
+  if (s.includes('mundo') && !s.includes('deportivo')) {
+    ctx.font = `800 13px ${SERIF_FONT}`
+    ctx.fillStyle = '#005999'
+    ctx.fillText('EL', cx - 28, topY + 14)
+    ctx.beginPath()
+    ctx.arc(cx - 15, topY + 10, 3, 0, Math.PI * 2)
+    ctx.fillStyle = '#10b981'
+    ctx.fill()
+    ctx.fillStyle = '#005999'
+    ctx.fillText('MUNDO', cx + 12, topY + 14)
+    return
+  }
+
+  // 7. La Vanguardia
+  if (s.includes('vanguardia')) {
+    ctx.font = `800 12.5px ${SERIF_FONT}`
+    ctx.fillStyle = '#1a1a24'
+    ctx.fillText('LA VANGUARDIA', cx, topY + 14)
+    return
+  }
+
+  // 8. elDiario.es
+  if (s.includes('eldiario')) {
+    ctx.font = `700 12px ${FONT}`
+    ctx.fillStyle = '#1e293b'
+    ctx.fillText('elDiario', cx - 8, topY + 14)
+    ctx.fillStyle = '#0284c7'
+    ctx.fillText('.es', cx + 22, topY + 14)
+    return
+  }
+
+  // 9. 20 Minutos
+  if (s.includes('20 minutos') || s.includes('20minutos')) {
+    ctx.font = `900 13px ${FONT}`
+    ctx.fillStyle = '#005ca9'
+    ctx.fillText('20', cx - 22, topY + 14)
+    ctx.font = `700 12px ${FONT}`
+    ctx.fillText('minutos', cx + 10, topY + 14)
+    return
+  }
+
+  // 10. El Confidencial
+  if (s.includes('confidencial')) {
+    ctx.font = `800 12px ${SERIF_FONT}`
+    ctx.fillStyle = '#1e293b'
+    ctx.fillText('El Confidencial', cx, topY + 14)
+    return
+  }
+
+  // 11. Negocios TV
+  if (s.includes('negocios')) {
+    ctx.font = `900 11px ${FONT}`
+    const textW = ctx.measureText('NEGOCIOS').width
+    const badgeW = 18
+    const gap = 5
+    const totalW = textW + gap + badgeW
+    const startX = cx - totalW / 2
+
+    ctx.textAlign = 'left'
+    ctx.fillStyle = '#0f172a'
+    ctx.fillText('NEGOCIOS', startX, topY + 14)
+
+    // Red badge for TV
+    ctx.fillStyle = '#dc2626'
+    roundRectPath(ctx, startX + textW + gap, topY + 4, badgeW, 11.5, 2.5)
+    ctx.fill()
+
+    ctx.font = `900 7.5px ${FONT}`
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.fillText('TV', startX + textW + gap + badgeW / 2, topY + 12.5)
+    return
+  }
+
+  // Fallback
+  const { main, sub } = parseMasthead(source)
+  ctx.font = `800 12.5px ${SERIF_FONT}`
+  ctx.fillStyle = '#0f172a'
+  ctx.fillText(fitText(ctx, main, maxW - 20), cx, sub ? topY + 10 : topY + 14)
+  if (sub) {
+    ctx.font = `600 6px ${FONT}`
+    ctx.fillStyle = '#64748b'
+    ctx.fillText(fitText(ctx, sub, maxW - 20), cx, topY + 17)
+  }
+}
+
+// Renderizado de la card sobre el canvas de la tesela WebGL.
+// Si tiene foto y ha cargado, renderiza tarjeta con foto hero.
+// Si NO tiene foto, renderiza la portada de periódico fiel a cardsprensa reales.jpg.
+function drawCard(
+  item: NewsItem,
+  img?: HTMLImageElement,
+  existingCanvas?: HTMLCanvasElement,
+): HTMLCanvasElement {
+  const c = existingCanvas || document.createElement('canvas')
+  if (!existingCanvas) {
+    c.width = TILE_W * TEX_SCALE
+    c.height = TILE_H * TEX_SCALE
+  }
   const ctx = c.getContext('2d')!
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, c.width, c.height)
   ctx.scale(TEX_SCALE, TEX_SCALE)
 
   const contra = item.contradicciones[0]
   const accent = contra ? contraColor(contra.intensidad) : item.sourceColor
-  const R = 10
-  const barH = contra ? CONTRA_STRIP_H : 0
-  const hasSummary = !!item.summary
+  const R = 12
   const { dia, hora } = fechaCorta(item.publishedAt)
+  const dateStr = hora ? `${dia} · ${hora}` : dia
+  const ini = iniciales(item.source)
+  const hasPhoto = !!(img && img.naturalWidth > 0)
 
-  // Fondo y recorte con esquinas redondeadas (la textura es transparente).
-  roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
-  ctx.fillStyle = '#12151c'
-  ctx.fill()
-  ctx.save()
-  roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
-  ctx.clip()
-
-  ctx.fillStyle = accent
-  ctx.fillRect(0, 0, 3, TILE_H)
-
-  // Cabecera: avatar con iniciales + nombre + fecha.
-  ctx.fillStyle = item.sourceColor
-  ctx.beginPath()
-  ctx.arc(27, 21, 9, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)'
-  ctx.lineWidth = 1
-  ctx.stroke()
-  ctx.font = `800 8px ${FONT}`
-  ctx.fillStyle = '#ffffff'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(iniciales(item.source), 27, 21.5)
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
-
-  const dateText = hora ? `${dia} · ${hora}` : dia
-  ctx.font = `500 10px ${FONT}`
-  const dateW = ctx.measureText(dateText).width
-  const iconW = item.imagenUrl ? 17 : 0
-  ctx.fillStyle = 'rgba(255,255,255,0.58)'
-  ctx.fillText(dateText, TILE_W - 12 - dateW, 25)
-  if (item.imagenUrl) {
-    // Icono de foto vectorial (antes un emoji, que parecía imagen rota).
-    const ix = TILE_W - 12 - dateW - 15
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)'
-    ctx.lineWidth = 1.2
-    roundRectPath(ctx, ix, 17, 11, 8, 1.5)
-    ctx.stroke()
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'
-    ctx.beginPath()
-    ctx.arc(ix + 3.5, 20.2, 1.1, 0, Math.PI * 2)
+  if (hasPhoto) {
+    // ── MODO CON FOTO HERO ────────────────────────────────────────────────
+    roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
+    ctx.fillStyle = '#12151c'
     ctx.fill()
+    ctx.save()
+    roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
+    ctx.clip()
+
+    // Foto superior
+    const bannerH = 96
+    drawImageCover(ctx, img, 0, 0, TILE_W, bannerH)
+
+    // Gradiente sobre la foto para transición suave
+    const grad = ctx.createLinearGradient(0, bannerH - 35, 0, bannerH)
+    grad.addColorStop(0, 'rgba(18, 21, 28, 0)')
+    grad.addColorStop(1, '#12151c')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, bannerH - 35, TILE_W, 35)
+
+    // Floating chip con medio
+    const chipText = item.source.toUpperCase()
+    ctx.font = `700 8.5px ${FONT}`
+    const textW = ctx.measureText(chipText).width
+    const chipW = textW + 22
+    const chipX = 10
+    const chipY = 8
+    roundRectPath(ctx, chipX, chipY, chipW, 16, 8)
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'
+    ctx.lineWidth = 0.8
+    ctx.stroke()
+    // Dot
+    ctx.beginPath()
+    ctx.arc(chipX + 7.5, chipY + 8, 2.8, 0, Math.PI * 2)
+    ctx.fillStyle = item.sourceColor || '#38bdf8'
+    ctx.fill()
+    // Text
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(chipText, chipX + 14, chipY + 8.5)
+    ctx.textBaseline = 'alphabetic'
+
+    // Titular
+    ctx.font = `600 12px ${FONT}`
+    ctx.fillStyle = '#f6f7fa'
+    wrapText(ctx, item.headline, 12, bannerH + 16, TILE_W - 24, 15, 2)
+
+    // Footer
+    const footY = TILE_H - 14
+    // Avatar
+    ctx.beginPath()
+    ctx.arc(18, footY, 6.5, 0, Math.PI * 2)
+    ctx.fillStyle = item.sourceColor || '#0284c7'
+    ctx.fill()
+    ctx.font = `800 6px ${FONT}`
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(ini, 18, footY + 0.5)
+
+    // Source y fecha
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    ctx.font = `700 8.5px ${FONT}`
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.fillText(item.source, 29, footY + 3)
+    const sW = ctx.measureText(item.source).width
+    ctx.font = `500 8px ${FONT}`
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+    ctx.fillText(`· ${dateStr}`, 29 + sW + 4, footY + 3)
+
+    ctx.restore()
+  } else {
+    // ── MODO PORTADA DE PERIÓDICO REAL (cardsprensa reales.jpg) ────────────
+    // 1. Contenedor exterior pizarra oscuro
+    roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
+    ctx.fillStyle = '#22252c'
+    ctx.fill()
+    ctx.save()
+    roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
+    ctx.clip()
+
+    // 2. Cápsula superior (pill)
+    const pillText = item.source.toUpperCase()
+    ctx.font = `800 7.5px ${FONT}`
+    const pTextW = ctx.measureText(pillText).width
+    const pillW = Math.min(TILE_W - 30, pTextW + 22)
+    const pillX = (TILE_W - pillW) / 2
+    roundRectPath(ctx, pillX, 4.5, pillW, 14.5, 7.25)
+    ctx.fillStyle = '#eaedf1'
+    ctx.fill()
+    // Dot
+    ctx.beginPath()
+    ctx.arc(pillX + 7, 11.75, 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = item.sourceColor || '#22c55e'
+    ctx.fill()
+    // Text
+    ctx.fillStyle = '#1e293b'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(fitText(ctx, pillText, pillW - 16), pillX + 13, 12.25)
+    ctx.textBaseline = 'alphabetic'
+
+    // 3. Hoja de periódico blanca
+    const sheetX = 6
+    const sheetY = 22.5
+    const sheetW = TILE_W - 12
+    const sheetH = TILE_H - 28.5
+    roundRectPath(ctx, sheetX, sheetY, sheetW, sheetH, 7)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+    ctx.save()
+    roundRectPath(ctx, sheetX, sheetY, sheetW, sheetH, 7)
+    ctx.clip()
+
+    // 4. Cabecera / Masthead Logo
+    drawCanvasMasthead(ctx, item.source, TILE_W / 2, sheetY + 3, sheetW)
+
+    // 5. Línea divisoria horizontal
+    ctx.strokeStyle = '#e2e8f0'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(sheetX + 7, sheetY + 23)
+    ctx.lineTo(sheetX + sheetW - 7, sheetY + 23)
+    ctx.stroke()
+
+    // 6. Sección / Categoría
+    const seccion = detectSeccion(item.enlace, item.source, item.headline)
+    const secY = sheetY + 33.5
+    if (seccion.isRed) {
+      ctx.font = `800 7px ${FONT}`
+      const badgeW = ctx.measureText(seccion.text).width + 8
+      roundRectPath(ctx, sheetX + 8, secY - 8, badgeW, 10.5, 2)
+      ctx.fillStyle = '#dc2626'
+      ctx.fill()
+      ctx.fillStyle = '#ffffff'
+      ctx.textAlign = 'left'
+      ctx.fillText(seccion.text, sheetX + 12, secY - 0.5)
+    } else {
+      ctx.font = `800 7px ${FONT}`
+      ctx.fillStyle = '#64748b'
+      ctx.textAlign = 'left'
+      ctx.fillText(seccion.text, sheetX + 8, secY - 0.5)
+    }
+
+    // 7. Titular editorial en Serif
+    ctx.font = `700 11px ${SERIF_FONT}`
+    ctx.fillStyle = '#0f172a'
+    ctx.textAlign = 'left'
+    wrapText(ctx, item.headline, sheetX + 8, sheetY + 45, sheetW - 16, 13.5, 3)
+
+    // 8. Resumen opcional corto si hay espacio y no hay contradicción
+    if (item.summary && !contra) {
+      ctx.font = `400 8px ${FONT}`
+      ctx.fillStyle = '#64748b'
+      wrapText(ctx, item.summary, sheetX + 8, sheetY + 90, sheetW - 16, 10.5, 1)
+    }
+
+    // 9. Footer dentro de la hoja blanca
+    const paperFootY = sheetY + sheetH - 10
+    // Mini avatar
+    ctx.beginPath()
+    ctx.arc(sheetX + 14, paperFootY, 5.5, 0, Math.PI * 2)
+    ctx.fillStyle = item.sourceColor || '#0284c7'
+    ctx.fill()
+    ctx.font = `800 5px ${FONT}`
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(ini, sheetX + 14, paperFootY + 0.5)
+
+    // Source y fecha
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    ctx.font = `700 8px ${FONT}`
+    ctx.fillStyle = '#1e293b'
+    ctx.fillText(item.source, sheetX + 23, paperFootY + 2.5)
+    const psW = ctx.measureText(item.source).width
+    ctx.font = `500 7.5px ${FONT}`
+    ctx.fillStyle = '#94a3b8'
+    ctx.fillText(`· ${dateStr}`, sheetX + 23 + psW + 3, paperFootY + 2.5)
+
+    // Flecha circular a la derecha
+    const arrX = sheetX + sheetW - 12
+    ctx.beginPath()
+    ctx.arc(arrX, paperFootY, 6.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#f1f5f9'
+    ctx.fill()
+    ctx.strokeStyle = '#e2e8f0'
+    ctx.lineWidth = 0.8
+    ctx.stroke()
+    ctx.font = `700 7px ${FONT}`
+    ctx.fillStyle = '#475569'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('→', arrX, paperFootY + 0.5)
+    ctx.textBaseline = 'alphabetic'
+
+    ctx.restore()
+    ctx.restore()
   }
 
-  ctx.font = `700 10.5px ${FONT}`
-  ctx.fillStyle = 'rgba(255,255,255,0.93)'
-  ctx.fillText(fitText(ctx, item.source.toUpperCase(), TILE_W - 44 - dateW - iconW - 14), 41, 25)
-
-  // Titular (crece si no hay resumen) y resumen.
-  const headSize = hasSummary ? 15 : 17
-  const headLine = hasSummary ? 19 : 21
-  ctx.font = `600 ${headSize}px ${FONT}`
-  ctx.fillStyle = '#f6f7fa'
-  wrapText(ctx, item.headline, 16, 54, TILE_W - 30, headLine, hasSummary ? 3 : 5)
-
-  if (hasSummary) {
-    const top = 114
-    const lines = Math.max(1, Math.floor((TILE_H - barH - top - 8) / 14.5))
-    ctx.font = `11.5px ${FONT}`
-    ctx.fillStyle = 'rgba(255,255,255,0.62)'
-    wrapText(ctx, item.summary, 16, top, TILE_W - 30, 14.5, lines)
-  }
-
+  // ── Contradicción si existe ─────────────────────────────────────────────
   if (contra) {
+    const barH = CONTRA_STRIP_H
+    ctx.save()
+    roundRectPath(ctx, 0, 0, TILE_W, TILE_H, R)
+    ctx.clip()
     ctx.fillStyle = accent
-    ctx.globalAlpha = 0.18
+    ctx.globalAlpha = 0.9
     ctx.fillRect(0, TILE_H - barH, TILE_W, barH)
-    ctx.globalAlpha = 0.45
-    ctx.fillRect(0, TILE_H - barH, TILE_W, 1)
     ctx.globalAlpha = 1
 
     const score = contra.intensidad.toFixed(1)
-    ctx.font = `800 10px ${FONT}`
-    const chipW = ctx.measureText(score).width + 14
-    roundRectPath(ctx, TILE_W - 12 - chipW, TILE_H - barH + 5, chipW, 14, 7)
-    ctx.fillStyle = accent
-    ctx.fill()
+    ctx.font = `800 9px ${FONT}`
+    const chipW = ctx.measureText(score).width + 12
+    roundRectPath(ctx, TILE_W - 10 - chipW, TILE_H - barH + 4.5, chipW, 15, 7.5)
     ctx.fillStyle = '#ffffff'
-    ctx.fillText(score, TILE_W - 12 - chipW + 7, TILE_H - barH + 15.5)
+    ctx.fill()
+    ctx.fillStyle = '#0f172a'
+    ctx.textAlign = 'center'
+    ctx.fillText(score, TILE_W - 10 - chipW / 2, TILE_H - barH + 15)
 
-    ctx.font = `700 10px ${FONT}`
-    ctx.fillStyle = legible(accent, 0.4)
+    ctx.font = `800 8.5px ${FONT}`
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'left'
     ctx.fillText(
-      fitText(ctx, `CONTRADICE A ${contra.fuenteContraria.toUpperCase()}`, TILE_W - 24 - chipW - 8),
-      16,
+      fitText(ctx, `VS ${contra.fuenteContraria.toUpperCase()}`, TILE_W - 20 - chipW - 8),
+      10,
       TILE_H - barH + 15.5,
     )
+    ctx.restore()
   }
-  ctx.restore()
 
-  // Borde fino neutro; con contradicción, del color de la contradicción.
+  // Borde fino exterior
   roundRectPath(ctx, 0.5, 0.5, TILE_W - 1, TILE_H - 1, R - 0.5)
-  ctx.strokeStyle = contra ? accent : 'rgba(255,255,255,0.1)'
-  ctx.lineWidth = contra ? 1.6 : 1
+  ctx.strokeStyle = contra ? accent : 'rgba(255,255,255,0.08)'
+  ctx.lineWidth = contra ? 1.8 : 1
   ctx.stroke()
 
+  ctx.restore()
   return c
 }
+
 
 // Halo suave (gradiente radial) compartido por todas las contradicciones y
 // por las cards de «misma historia»; el color lo pone el material.
@@ -231,40 +578,101 @@ function makeHaloTexture(): THREE.CanvasTexture {
   return tex
 }
 
-function drawFloorArrow(label: string, isRight: boolean): HTMLCanvasElement {
+function drawFloorArrow(isRight: boolean, targetPage: number): HTMLCanvasElement {
+  const W = 340
+  const H = 160
   const c = document.createElement('canvas')
-  c.width = 420 * TEX_SCALE
-  c.height = 110 * TEX_SCALE
+  c.width = W * TEX_SCALE
+  c.height = H * TEX_SCALE
   const ctx = c.getContext('2d')!
   ctx.scale(TEX_SCALE, TEX_SCALE)
 
+  const isLight = document.documentElement.classList.contains('light')
   const mainColor = isRight ? '#00e5ff' : '#a855f7'
+  const glowColor = isRight ? 'rgba(0, 229, 255, 0.12)' : 'rgba(168, 85, 247, 0.12)'
 
-  // Fondo glassmorphism
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
-  ctx.fillRect(0, 0, 420, 110)
+  // Fondo glassmorphic con esquinas suaves
+  roundRectPath(ctx, 4, 4, W - 8, H - 8, 18)
+  const bgGrad = ctx.createLinearGradient(0, 0, W, H)
+  if (isLight) {
+    bgGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)')
+    bgGrad.addColorStop(1, 'rgba(241, 245, 249, 0.92)')
+  } else {
+    bgGrad.addColorStop(0, 'rgba(15, 23, 42, 0.92)')
+    bgGrad.addColorStop(1, 'rgba(10, 15, 28, 0.95)')
+  }
+  ctx.fillStyle = bgGrad
+  ctx.fill()
 
-  // Borde neón
+  // Sutil resplandor interior
+  ctx.fillStyle = glowColor
+  ctx.fill()
+
+  // Borde fino elegante
   ctx.strokeStyle = mainColor
-  ctx.lineWidth = 4
-  ctx.strokeRect(2, 2, 416, 106)
+  ctx.lineWidth = 1.8
+  ctx.stroke()
 
-  // Glow decorativo
+  // Pill badge en la parte superior
+  const badgeText = isRight ? 'HISTÓRICO ANTERIOR' : 'NOTICIAS RECIENTES'
+  ctx.font = `700 11px ${FONT}`
+  const badgeW = ctx.measureText(badgeText).width + 24
+  const badgeX = (W - badgeW) / 2
+  const badgeY = 18
+  roundRectPath(ctx, badgeX, badgeY, badgeW, 22, 11)
+  ctx.fillStyle = isRight ? 'rgba(0, 229, 255, 0.12)' : 'rgba(168, 85, 247, 0.12)'
+  ctx.fill()
+  ctx.strokeStyle = mainColor
+  ctx.lineWidth = 1
+  ctx.stroke()
+
   ctx.fillStyle = mainColor
-  ctx.globalAlpha = 0.15
-  ctx.fillRect(4, 4, 412, 102)
-  ctx.globalAlpha = 1.0
-
-  // Texto
-  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
-  ctx.fillStyle = '#ffffff'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(label, 210, 42)
+  ctx.fillText(badgeText, W / 2, badgeY + 11)
 
-  ctx.font = '600 13px system-ui, -apple-system, sans-serif'
-  ctx.fillStyle = mainColor
-  ctx.fillText(isRight ? 'PULSA PARA AVANZAR EN EL TIEMPO' : 'PULSA PARA VER NOTICIAS RECIENTES', 210, 78)
+  // Círculo del icono central con flecha
+  const circleX = W / 2
+  const circleY = 72
+  const circleR = 20
+  ctx.beginPath()
+  ctx.arc(circleX, circleY, circleR, 0, Math.PI * 2)
+  ctx.fillStyle = isRight ? 'rgba(0, 229, 255, 0.18)' : 'rgba(168, 85, 247, 0.18)'
+  ctx.fill()
+  ctx.strokeStyle = mainColor
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  // Dibujar vector de la flecha / chevron
+  ctx.beginPath()
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 2.5
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  if (isRight) {
+    ctx.moveTo(circleX - 4, circleY - 7)
+    ctx.lineTo(circleX + 4, circleY)
+    ctx.lineTo(circleX - 4, circleY + 7)
+  } else {
+    ctx.moveTo(circleX + 4, circleY - 7)
+    ctx.lineTo(circleX - 4, circleY)
+    ctx.lineTo(circleX + 4, circleY + 7)
+  }
+  ctx.stroke()
+
+  // Título principal
+  ctx.font = `700 16px ${FONT}`
+  ctx.fillStyle = isLight ? '#0f172a' : '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const actionText = isRight ? `Avanzar a Página ${targetPage + 1}` : `Volver a Página ${targetPage + 1}`
+  ctx.fillText(actionText, W / 2, 112)
+
+  // Subtítulo
+  ctx.font = `500 12px ${FONT}`
+  ctx.fillStyle = isLight ? '#64748b' : 'rgba(255, 255, 255, 0.55)'
+  const hintText = 'Haz clic para navegar'
+  ctx.fillText(hintText, W / 2, 134)
 
   return c
 }
@@ -322,7 +730,15 @@ function mockToNewsItem(m: MockNewsItem): NewsItem {
   }
 }
 
-export default function WallGL({ onReady }: { onReady?: () => void }) {
+export default function WallGL({
+  onReady,
+  view = 'muro',
+  onViewChange,
+}: {
+  onReady?: () => void
+  view?: 'muro' | 'tiempo'
+  onViewChange?: (v: 'muro' | 'tiempo') => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const readyFiredRef = useRef(false)
   const flashRef = useRef<HTMLDivElement>(null)
@@ -357,14 +773,47 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
     setOverlayState(value)
   }, [])
   const closeOverlay = useCallback(() => setOverlay(null), [setOverlay])
-  const toggleOverlayFlip = useCallback(
-    () => setOverlay((cur) => (cur ? { ...cur, flipped: !cur.flipped } : cur)),
-    [setOverlay],
-  )
+
+  // ── Pop-out 3D de Contradicciones Cara a Cara ──────────────────────────
+  const [comparison, setComparison] = useState<{
+    item: NewsItem
+    contra: Contradiccion
+    contrarioItem?: NewsItem
+    contrarioEnlace?: string
+  } | null>(null)
+
+  const openComparisonRef = useRef<(item: NewsItem, contra?: Contradiccion) => void>(() => {})
+
+  const openComparison = useCallback((item: NewsItem, contra?: Contradiccion) => {
+    const c = contra || (item.contradicciones && item.contradicciones[0])
+    if (!c) return
+    const contrarioItem = itemsRef.current.find((i) => i.id === c.noticiaContrariaId)
+    setComparison({
+      item,
+      contra: c,
+      contrarioItem,
+      contrarioEnlace: contrarioItem?.enlace,
+    })
+    setOverlay(null)
+  }, [setOverlay])
+
+  openComparisonRef.current = openComparison
+
+  const toggleOverlayFlip = useCallback(() => {
+    const cur = overlayRef.current
+    if (!cur) return
+    // 2º Click: si ya está girada mostrando el reverso y tiene contradicciones,
+    // sale del muro hacia el usuario en vista comparativa cara a cara.
+    if (cur.flipped && cur.item.contradicciones && cur.item.contradicciones.length > 0) {
+      const contra = cur.item.contradicciones[0]
+      openComparison(cur.item, contra)
+      return
+    }
+    setOverlay({ ...cur, flipped: !cur.flipped })
+  }, [openComparison, setOverlay])
   // Ancla de fecha del botón Hoy/calendario — YYYY-MM-DD, o null = "lo más
   // reciente" (comportamiento de siempre, sin filtro de fecha).
   const [dateAnchor, setDateAnchor] = useState<string | null>(null)
-  const [showCalendar, setShowCalendar] = useState(false)
 
   // Salto de fecha (Hoy o un día del calendario): dolly-out + blur de la
   // escena viva, flash de marca tapando el remount real de Three.js, y la
@@ -372,10 +821,14 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
   // (ver useEffect). No toca la física del muro (pan/zoom con inercia) —
   // ver dev-xplain 2026-09-30-0159-prensa-hoy-transicion-gsap.
   const jumpTo = (apply: () => void) => {
-    setShowCalendar(false)
     const commit = () => {
       justJumpedRef.current = true
-      if (flashRef.current) gsap.to(flashRef.current, { opacity: 1, duration: 0.15, ease: 'power1.in' })
+      if (flashRef.current) {
+        gsap.killTweensOf(flashRef.current)
+        gsap.timeline()
+          .to(flashRef.current, { opacity: 0.7, duration: 0.15, ease: 'power2.in' })
+          .to(flashRef.current, { opacity: 0, duration: 0.35, ease: 'power2.out', delay: 0.05 })
+      }
       apply()
     }
     if (sceneApiRef.current) {
@@ -385,8 +838,15 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
     }
   }
 
-  const goToday = () => jumpTo(() => { setDateAnchor(null); setPage(0) })
-  const goToDate = (isoDate: string) => jumpTo(() => { setDateAnchor(isoDate); setPage(0) })
+  const goToday = () => {
+    if (dateAnchor === null && page === 0) return
+    jumpTo(() => { setDateAnchor(null); setPage(0) })
+  }
+
+  const goToDate = (isoDate: string) => {
+    if (dateAnchor === isoDate && page === 0) return
+    jumpTo(() => { setDateAnchor(isoDate); setPage(0) })
+  }
 
   useEffect(() => {
     const host = containerRef.current
@@ -398,18 +858,27 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
     ;(async () => {
       let items: NewsItem[]
       try {
-        const antes = dateAnchor ? `${dateAnchor}T23:59:59.999` : undefined
+        // Con texto de búsqueda, el usuario espera un buscador global: el
+        // ancla de fecha (Hoy/calendario) deja de restringir el resultado.
+        const antes = dateAnchor && !filters.q ? `${dateAnchor}T23:59:59.999` : undefined
         items = await fetchNoticias(PAGE_SIZE, page * PAGE_SIZE, antes, filters)
-        if (items.length === 0 && page > 0) {
-          // Si nos pasamos de página, volvemos a la 0
-          setPage(0)
-          return
+        if (items.length === 0) {
+          if (page > 0) {
+            if (flashRef.current) gsap.set(flashRef.current, { opacity: 0 })
+            setPage(0)
+            return
+          }
+          // Si no hay noticias para esa fecha/filtro en página 0, cargar muestra segura para que Three.js no rompa
+          items = generateSampleNews(PAGE_SIZE).map(mockToNewsItem)
         }
       } catch (err) {
         console.warn('No se pudo cargar /api/noticias, usando datos de ejemplo:', err)
         items = generateSampleNews(PAGE_SIZE).map(mockToNewsItem)
       }
-      if (disposed) return
+      if (disposed) {
+        if (flashRef.current) gsap.set(flashRef.current, { opacity: 0 })
+        return
+      }
       itemsRef.current = items
       if (!readyFiredRef.current) {
         readyFiredRef.current = true
@@ -451,8 +920,8 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
       // hace dolly-in (jumpDolly.z) + fade/deblur hasta el estado normal. Si
       // no viene de un salto (paginación normal), no se toca nada de esto.
       if (animateIn) {
-        renderer.domElement.style.opacity = '0'
-        renderer.domElement.style.filter = 'blur(10px)'
+        renderer.domElement.style.opacity = '0.2'
+        renderer.domElement.style.filter = 'blur(8px)'
         gsap.to(renderer.domElement, {
           opacity: 1,
           filter: 'blur(0px)',
@@ -461,7 +930,13 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
         })
         gsap.to(jumpDolly, { z: 0, duration: JUMP_ENTER_DURATION, ease: 'power3.out' })
         if (flashRef.current) {
-          gsap.to(flashRef.current, { opacity: 0, duration: 0.4, ease: 'power2.out', delay: 0.05 })
+          gsap.to(flashRef.current, { opacity: 0, duration: 0.35, ease: 'power2.out' })
+        }
+      } else {
+        renderer.domElement.style.opacity = '1'
+        renderer.domElement.style.filter = 'none'
+        if (flashRef.current) {
+          gsap.set(flashRef.current, { opacity: 0 })
         }
       }
 
@@ -506,15 +981,39 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
         countOf.set(k, (countOf.get(k) ?? 0) + 1)
       }
 
-      // Render de tarjetas de la página actual
+      // Render de tarjetas de la página actual. El `% items.length` rellena
+      // la rejilla cuando faltan pocas (última página del feed); pero con
+      // resultados muy escasos (p. ej. 1 noticia de una búsqueda) repetiría
+      // la MISMA tarjeta en las 108 celdas — si no hay ni una fila completa,
+      // se centran en una sola fila en vez de rellenar: la cámara arranca
+      // mirando al centro de WALL_W (ancho fijo de 36 columnas), así que con
+      // pocos items hay que colocarlos ahí o quedan fuera de vista.
+      const sparse = items.length < COLS
+      const sparseStartCol = sparse ? Math.max(0, Math.floor((COLS - items.length) / 2)) : 0
+      const sparseRow = Math.floor(ROWS / 2)
       for (let row = 0; row < ROWS; row++) {
         for (let col = 0; col < COLS; col++) {
-          const item = items[(row * COLS + col) % items.length]
-          const tex = new THREE.CanvasTexture(drawCard(item))
+          if (sparse) {
+            if (row !== sparseRow) continue
+            const i = col - sparseStartCol
+            if (i < 0 || i >= items.length) continue
+          }
+          const idx = row * COLS + col
+          const item = sparse ? items[col - sparseStartCol] : items[idx % items.length]
+          const canvas = drawCard(item)
+          const tex = new THREE.CanvasTexture(canvas)
           tex.colorSpace = THREE.SRGBColorSpace
           tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
           const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true })
           disposables.push(tex, mat)
+
+          if (item.imagenUrl) {
+            loadCardImage(item.imagenUrl, (img) => {
+              if (disposed) return
+              drawCard(item, img, canvas)
+              tex.needsUpdate = true
+            })
+          }
 
           const mesh = new THREE.Mesh(geo, mat)
           const contra = item.contradicciones[0]
@@ -564,39 +1063,38 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
         }
       }
 
-      // ── Botones / Flechas 3D en el Suelo (Navegación entre Páginas) ──
-      const floorArrowGeo = new THREE.PlaneGeometry(420, 110)
-      disposables.push(floorArrowGeo)
+      // ── Tarjetas 3D Laterales a la altura de la vista (Navegación entre Páginas) ──
+      const navCardGeo = new THREE.PlaneGeometry(340, 160)
+      disposables.push(navCardGeo)
+      const navMeshes: THREE.Mesh[] = []
 
-      // Flecha Suelo Derecha (Avanzar / Noticias Anteriores)
-      const rightFloorTex = new THREE.CanvasTexture(drawFloorArrow('AVANZAR PÁGINA »', true))
-      rightFloorTex.colorSpace = THREE.SRGBColorSpace
-      const rightFloorMat = new THREE.MeshBasicMaterial({ map: rightFloorTex, transparent: true })
-      disposables.push(rightFloorTex, rightFloorMat)
+      // Tarjeta Derecha (Avanzar / Noticias Anteriores en el tiempo)
+      if ((page + 1) * PAGE_SIZE < totalCount) {
+        const rightNavTex = new THREE.CanvasTexture(drawFloorArrow(true, page + 1))
+        rightNavTex.colorSpace = THREE.SRGBColorSpace
+        const rightNavMat = new THREE.MeshBasicMaterial({ map: rightNavTex, transparent: true })
+        disposables.push(rightNavTex, rightNavMat)
 
-      const rightFloorMesh = new THREE.Mesh(floorArrowGeo, rightFloorMat)
-      rightFloorMesh.position.set(
-        WALL_W / 2 + 180,
-        -(ROWS / 2 + 0.7) * STEP_Y,
-        40,
-      )
-      rightFloorMesh.userData = { isButton: true, action: 'next' }
-      wall.add(rightFloorMesh)
+        const rightNavMesh = new THREE.Mesh(navCardGeo, rightNavMat)
+        rightNavMesh.position.set(WALL_W / 2 + 200, 0, 30)
+        rightNavMesh.userData = { isButton: true, action: 'next' }
+        wall.add(rightNavMesh)
+        navMeshes.push(rightNavMesh)
+      }
 
-      // Flecha Suelo Izquierda (Anterior / Noticias Recientes)
-      const leftFloorTex = new THREE.CanvasTexture(drawFloorArrow('« PÁGINA ANTERIOR', false))
-      leftFloorTex.colorSpace = THREE.SRGBColorSpace
-      const leftFloorMat = new THREE.MeshBasicMaterial({ map: leftFloorTex, transparent: true })
-      disposables.push(leftFloorTex, leftFloorMat)
+      // Tarjeta Izquierda (Volver / Noticias Recientes)
+      if (page > 0) {
+        const leftNavTex = new THREE.CanvasTexture(drawFloorArrow(false, Math.max(0, page - 1)))
+        leftNavTex.colorSpace = THREE.SRGBColorSpace
+        const leftNavMat = new THREE.MeshBasicMaterial({ map: leftNavTex, transparent: true })
+        disposables.push(leftNavTex, leftNavMat)
 
-      const leftFloorMesh = new THREE.Mesh(floorArrowGeo, leftFloorMat)
-      leftFloorMesh.position.set(
-        -WALL_W / 2 - 180,
-        -(ROWS / 2 + 0.7) * STEP_Y,
-        40,
-      )
-      leftFloorMesh.userData = { isButton: true, action: 'prev' }
-      wall.add(leftFloorMesh)
+        const leftNavMesh = new THREE.Mesh(navCardGeo, leftNavMat)
+        leftNavMesh.position.set(-WALL_W / 2 - 200, 0, 30)
+        leftNavMesh.userData = { isButton: true, action: 'prev' }
+        wall.add(leftNavMesh)
+        navMeshes.push(leftNavMesh)
+      }
 
       // ---- Física
       let posX = 0
@@ -632,12 +1130,13 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
       el.style.touchAction = 'none'
       el.style.cursor = 'grab'
 
-      const checkFloorClick = (clientX: number, clientY: number) => {
+      const checkNavClick = (clientX: number, clientY: number) => {
+        if (!navMeshes.length) return false
         const rect = el.getBoundingClientRect()
         mouseVec.x = ((clientX - rect.left) / rect.width) * 2 - 1
         mouseVec.y = -((clientY - rect.top) / rect.height) * 2 + 1
         raycaster.setFromCamera(mouseVec, camera)
-        const intersects = raycaster.intersectObjects([rightFloorMesh, leftFloorMesh])
+        const intersects = raycaster.intersectObjects(navMeshes)
         if (intersects.length > 0) {
           const hit = intersects[0].object
           if (hit.userData.action === 'next') {
@@ -648,6 +1147,16 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
           return true
         }
         return false
+      }
+
+      const pickNavAt = (clientX: number, clientY: number): THREE.Mesh | null => {
+        if (!navMeshes.length) return null
+        const rect = el.getBoundingClientRect()
+        mouseVec.x = ((clientX - rect.left) / rect.width) * 2 - 1
+        mouseVec.y = -((clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(mouseVec, camera)
+        const hits = raycaster.intersectObjects(navMeshes)
+        return hits.length ? (hits[0].object as THREE.Mesh) : null
       }
 
       const pickAt = (clientX: number, clientY: number): THREE.Mesh | null => {
@@ -770,7 +1279,8 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
       const onHover = (e: PointerEvent) => {
         if (e.pointerType === 'touch' || dragging || overlayRef.current) return
         const m = pickAt(e.clientX, e.clientY)
-        el.style.cursor = m ? 'pointer' : 'grab'
+        const navHit = pickNavAt(e.clientX, e.clientY)
+        el.style.cursor = (m || navHit) ? 'pointer' : 'grab'
         if (!m) {
           clearDwell()
           return
@@ -832,11 +1342,25 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
         }
 
         const moveDist = Math.hypot(e.clientX - startX, e.clientY - startY)
-        if (moveDist < 6) {
-          // Click limpio sin arrastre → flecha de suelo, o card girada.
-          if (checkFloorClick(e.clientX, e.clientY)) return
+        const tapSlop = e.pointerType === 'touch' ? 14 : 6
+        if (moveDist < tapSlop) {
+          // Click limpio sin arrastre → tarjeta de navegación 3D, o card girada.
+          if (checkNavClick(e.clientX, e.clientY)) return
           const m = pickAt(e.clientX, e.clientY)
           if (m) {
+            const hitItem = m.userData.item as NewsItem
+            const curOverlay = overlayRef.current
+            if (
+              curOverlay?.flipped &&
+              curOverlay.item.contradicciones &&
+              curOverlay.item.contradicciones.length > 0
+            ) {
+              const contra = curOverlay.item.contradicciones[0]
+              if (hitItem.id === curOverlay.item.id || hitItem.id === contra.noticiaContrariaId) {
+                openComparisonRef.current(curOverlay.item, contra)
+                return
+              }
+            }
             openOverlay(m, { flipped: true, sticky: false })
             return
           }
@@ -939,6 +1463,10 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
         window.removeEventListener('resize', onResize)
         gsap.killTweensOf(jumpDolly)
         gsap.killTweensOf(renderer.domElement)
+        if (flashRef.current) {
+          gsap.killTweensOf(flashRef.current)
+          gsap.set(flashRef.current, { opacity: 0 })
+        }
         sceneApiRef.current = null
         disposables.forEach((d) => d.dispose())
         renderer.dispose()
@@ -948,6 +1476,10 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
 
     return () => {
       disposed = true
+      if (flashRef.current) {
+        gsap.killTweensOf(flashRef.current)
+        gsap.set(flashRef.current, { opacity: 0 })
+      }
       cleanup?.()
     }
   }, [page, dateAnchor, filters])
@@ -956,7 +1488,7 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
   // hardcodeado a 3330; con filtros activos esa cifra ya no significa nada.
   useEffect(() => {
     let cancelled = false
-    const antes = dateAnchor ? `${dateAnchor}T23:59:59.999` : undefined
+    const antes = dateAnchor && !filters.q ? `${dateAnchor}T23:59:59.999` : undefined
     fetchNoticiasCount(antes, filters)
       .then((total) => { if (!cancelled) setTotalCount(total) })
       .catch(() => { /* se queda con el último total válido */ })
@@ -977,64 +1509,47 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
     <div className="wall-root">
       <div ref={containerRef} className="wall-stage" />
       
-      {/* Botones Flotantes de Avanzar/Retroceder en Pantalla */}
+      {/* Dock Superior Unificado de 4-5 botones */}
+      <HeaderDock
+        view={view}
+        onViewChange={onViewChange}
+        dateAnchor={dateAnchor}
+        onToday={goToday}
+        onSelectDate={goToDate}
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+        totalCount={totalCount}
+      />
+
+      {/* Botones Flotantes Laterales en Pantalla */}
       {page > 0 && (
         <button
           className="wall-arrow wall-arrow-left"
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           title="Página Anterior / Noticias Recientes"
+          aria-label="Página anterior"
         >
-          ‹
+          <ChevronLeft size={28} strokeWidth={2.4} />
         </button>
       )}
-      <button
-        className="wall-arrow wall-arrow-right"
-        onClick={() => setPage((p) => p + 1)}
-        title="Página Siguiente / Avance en el tiempo"
-      >
-        ›
-      </button>
-
-      {/* Navegación por fecha: volver a lo más reciente, o saltar a un día */}
-      <div className="wall-date-nav">
-        <button className="wall-date-btn wall-date-btn-today" onClick={goToday} title="Volver a lo más reciente">
-          ↺ HOY
-        </button>
+      {(page + 1) * PAGE_SIZE < totalCount && (
         <button
-          className="wall-date-btn wall-date-btn-cal"
-          onClick={() => setShowCalendar((v) => !v)}
-          title="Saltar a una fecha"
-          aria-label="Abrir calendario"
+          className="wall-arrow wall-arrow-right"
+          onClick={() => setPage((p) => p + 1)}
+          title="Página Siguiente / Noticias Anteriores"
+          aria-label="Página siguiente"
         >
-          📅
+          <ChevronRight size={28} strokeWidth={2.4} />
         </button>
-        {showCalendar && (
-          <DateCalendar
-            selected={dateAnchor}
-            onSelect={goToDate}
-            onClose={() => setShowCalendar(false)}
-          />
-        )}
-      </div>
-
-      {/* Toolbar: búsqueda + fuente + sección + contradicciones. El contador
-          ya existe en wall-legend más abajo ("Mostrando X-Y de TOTAL"), así
-          que aquí no se repite. */}
-      <div className="wall-toolbar-wrap">
-        <Toolbar filters={filters} onChange={handleFiltersChange} count={null} total={null} />
-      </div>
+      )}
 
       {/* Overlay Superior e Inferior */}
       <div className="wall-overlay">
-        <div className="wall-header">
-          <h1 className="wall-title">LyAi · Prensa</h1>
-          <p className="wall-subtitle">Lo que cuentan los medios españoles — y cuándo no coinciden</p>
-        </div>
-
         <div className="wall-legend">
           <span className="legend-dot legend-dot-comet" />
           <span>
-            {dateAnchor ? `Noticias hasta el ${dateAnchor} · ` : ''}
+            {dateAnchor && !filters.q ? `Noticias hasta el ${dateAnchor} · ` : ''}
+            {dateAnchor && filters.q ? 'Buscando en todo el histórico (fecha ignorada) · ' : ''}
             Mostrando {startNewsIdx} - {endNewsIdx} de {totalCount} noticias (Página {page + 1})
           </span>
         </div>
@@ -1045,111 +1560,30 @@ export default function WallGL({ onReady }: { onReady?: () => void }) {
           re-render de React. */}
       <div ref={flashRef} className="wall-jump-flash" />
 
-      {overlay && <CardOverlay state={overlay} onToggle={toggleOverlayFlip} onClose={closeOverlay} />}
+      {overlay && (
+        <CardOverlay
+          state={overlay}
+          onToggle={toggleOverlayFlip}
+          onClose={closeOverlay}
+          onOpenComparison={() => {
+            if (overlay.item.contradicciones && overlay.item.contradicciones.length > 0) {
+              openComparison(overlay.item, overlay.item.contradicciones[0])
+            }
+          }}
+        />
+      )}
+
+      {comparison && (
+        <ContradictionComparison
+          item={comparison.item}
+          contra={comparison.contra}
+          contrarioItem={comparison.contrarioItem}
+          contrarioEnlace={comparison.contrarioEnlace}
+          onClose={() => setComparison(null)}
+        />
+      )}
     </div>
   )
 }
 
-const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-]
 
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function DateCalendar({
-  selected,
-  onSelect,
-  onClose,
-}: {
-  selected: string | null
-  onSelect: (iso: string) => void
-  onClose: () => void
-}) {
-  const today = new Date()
-  const initial = selected ? new Date(`${selected}T00:00:00`) : today
-  const [viewYear, setViewYear] = useState(initial.getFullYear())
-  const [viewMonth, setViewMonth] = useState(initial.getMonth()) // 0-11
-  const [contraDays, setContraDays] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    const desde = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`
-    const hastaDate = new Date(viewYear, viewMonth + 1, 1)
-    const hasta = isoDate(hastaDate)
-    let cancelled = false
-    fetchDiasContradiccion(desde, hasta)
-      .then((days) => {
-        if (!cancelled) setContraDays(days)
-      })
-      .catch((err) => console.warn('No se pudo cargar /api/contradicciones/dias:', err))
-    return () => {
-      cancelled = true
-    }
-  }, [viewYear, viewMonth])
-
-  const firstOfMonth = new Date(viewYear, viewMonth, 1)
-  // getDay(): 0=domingo..6=sábado → lo pasamos a L=0..D=6
-  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
-  const todayIso = isoDate(today)
-
-  const changeMonth = (delta: number) => {
-    let m = viewMonth + delta
-    let y = viewYear
-    if (m < 0) {
-      m = 11
-      y -= 1
-    } else if (m > 11) {
-      m = 0
-      y += 1
-    }
-    setViewMonth(m)
-    setViewYear(y)
-  }
-
-  return (
-    <div className="wall-calendar" onClick={(e) => e.stopPropagation()}>
-      <div className="wall-calendar-head">
-        <button onClick={() => changeMonth(-1)} aria-label="Mes anterior">‹</button>
-        <span>{MESES[viewMonth]} {viewYear}</span>
-        <button onClick={() => changeMonth(1)} aria-label="Mes siguiente">›</button>
-      </div>
-      <div className="wall-calendar-grid wall-calendar-dow">
-        {DIAS_SEMANA.map((d) => (
-          <span key={d}>{d}</span>
-        ))}
-      </div>
-      <div className="wall-calendar-grid">
-        {Array.from({ length: leadingBlanks }).map((_, i) => (
-          <span key={`blank-${i}`} />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1
-          const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-          const isToday = iso === todayIso
-          const isSelected = iso === selected
-          const hasContra = contraDays.has(iso)
-          const cls = [
-            'wall-calendar-day',
-            isSelected ? 'is-selected' : '',
-            !isSelected && isToday ? 'is-today' : '',
-            hasContra ? 'has-contra' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-          return (
-            <button key={iso} className={cls} onClick={() => onSelect(iso)}>
-              {day}
-            </button>
-          )
-        })}
-      </div>
-      <div className="wall-calendar-foot">
-        <button onClick={onClose}>Cerrar</button>
-      </div>
-    </div>
-  )
-}
