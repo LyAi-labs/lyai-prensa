@@ -21,6 +21,7 @@ import {
 import { Header17, type NavLink } from '../../shared/components/header-17'
 import FluidDropdown, { type DropdownOption } from './FluidDropdown'
 import DateCalendar from './DateCalendar'
+import SearchResultsDropdown from './SearchResultsDropdown'
 import './header-dock.css'
 
 const TIPOS: DropdownOption[] = [
@@ -83,6 +84,7 @@ export default function HeaderDock({
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [qLocal, setQLocal] = useState(filters.q ?? '')
+  const [searchFocused, setSearchFocused] = useState(false)
   const [contraStats, setContraStats] = useState<ContradiccionesConteo | null>(null)
   const [themeToast, setThemeToast] = useState(false)
 
@@ -395,6 +397,8 @@ export default function HeaderDock({
                     placeholder="Ej. Elecciones, inflación, energía…"
                     value={qLocal}
                     onChange={(e) => handleSearchInput(e.target.value)}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') clearSearch()
                     }}
@@ -410,6 +414,7 @@ export default function HeaderDock({
                     </button>
                   )}
                 </div>
+                <SearchResultsDropdown query={qLocal} inputFocused={searchFocused} />
               </div>
 
               {/* Tipo de Fuente */}

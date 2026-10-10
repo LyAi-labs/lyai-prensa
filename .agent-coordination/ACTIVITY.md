@@ -128,3 +128,10 @@ que no se ven en tiempo real. Ver
   - **Desplegado y verificado 09:03 UTC** (Playwright contra producción: búsqueda, fichas, CSV, móvil, muro intacto).
     Detalle en CLAUDE.md § «Archivo para periodistas». Imágenes anteriores: `:pre-archivo-20261010`.
     Mi commit incluye lo que había sin commitear en `api/main.py` y `docker/nginx.conf` (ya estaba en producción).
+
+## 2026-10-10 — Claude Code (sesión principal)
+- Pedido: adaptar `lyai-shared/components/command-palette` (⌘K, existente sin usar) al estilo del
+  action-searchbar de 21st.dev pegado por Ignacio, para la barra de búsqueda del `Toolbar.tsx`.
+- Dev-xplain publicado: https://dev.lyai.pro/dev-xplain/2026-10-10-1530-search-dropdown-live/
+  (dropdown inline con resultados reales vía `/api/archivo/noticias?q=`, contradicciones en rojo).
+- Pendiente de "aplica" de Ignacio antes de tocar código. Nada editado aún en `src/`.
