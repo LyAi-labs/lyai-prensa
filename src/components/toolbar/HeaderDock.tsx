@@ -11,6 +11,7 @@ import {
   IconX,
   IconNews,
   IconCategory,
+  IconArchive,
 } from '@tabler/icons-react'
 import {
   type NewsFilters,
@@ -217,6 +218,11 @@ export default function HeaderDock({
         setFiltersOpen((o) => !o)
         setCalendarOpen(false)
       },
+    },
+    {
+      label: 'Archivo',
+      href: '/archivo',
+      icon: <IconArchive className="size-4 shrink-0" strokeWidth={2.2} />,
     },
   ]
 
