@@ -3,6 +3,7 @@ import WallGL from './components/WallGL'
 import Splash from './components/card/Splash'
 import TimelineView from './components/views/TimelineView'
 import InstallPrompt from './components/pwa/InstallPrompt'
+import RotateHint from './components/RotateHint'
 
 // Vista predeterminada: el muro 3D. La línea de tiempo es solo una opción
 // (selector en el FloatingDock superior) y no se recuerda entre visitas.
@@ -20,6 +21,7 @@ export default function App() {
         <TimelineView key="tiempo" onReady={onReady} view={view} onViewChange={setView} />
       )}
       <InstallPrompt />
+      <RotateHint />
       <Splash ready={ready} />
     </>
   )

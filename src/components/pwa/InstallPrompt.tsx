@@ -16,6 +16,9 @@ export default function InstallPrompt() {
     /iPad|iPhone|iPod/.test(navigator.userAgent) &&
     !(window as unknown as { MSStream?: unknown }).MSStream
 
+  const isAndroid =
+    typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent)
+
   useEffect(() => {
     // Si ya está ejecutándose como PWA instalada, nunca mostrar nada
     if (isStandalone()) {
@@ -187,7 +190,13 @@ export default function InstallPrompt() {
         <div className="pwa-ios-modal" onClick={() => setIsIosGuide(false)}>
           <div className="pwa-ios-card" onClick={(e) => e.stopPropagation()}>
             <div className="pwa-ios-header">
-              <h3>{isIos ? 'Instalar en tu iPhone o iPad' : 'Cómo instalar la aplicación'}</h3>
+              <h3>
+              {isIos
+                ? 'Instalar en tu iPhone o iPad'
+                : isAndroid
+                  ? 'Instalar en tu Android'
+                  : 'Cómo instalar la aplicación'}
+            </h3>
               <button
                 type="button"
                 className="pwa-ios-close"
@@ -199,7 +208,9 @@ export default function InstallPrompt() {
             <p className="pwa-ios-desc">
               {isIos
                 ? 'Sigue estos sencillos pasos desde Safari:'
-                : 'Puedes añadir la aplicación a tu escritorio o pantalla de inicio:'}
+                : isAndroid
+                  ? 'Chrome aún no ha ofrecido el instalador automático — hazlo a mano desde su menú:'
+                  : 'Puedes añadir la aplicación a tu escritorio o pantalla de inicio:'}
             </p>
             <ol className="pwa-ios-steps">
               {isIos ? (
@@ -239,6 +250,17 @@ export default function InstallPrompt() {
                   <li>
                     Pulsa <b>«Añadir»</b> arriba a la derecha. ¡Listo!
                   </li>
+                </>
+              ) : isAndroid ? (
+                <>
+                  <li>
+                    Pulsa los <b>tres puntos ⋮</b> arriba a la derecha de Chrome.
+                  </li>
+                  <li>
+                    Elige <b>«Instalar aplicación»</b> (o «Añadir a pantalla de inicio» si no aparece
+                    esa opción).
+                  </li>
+                  <li>Confirma con «Instalar». ¡Listo!</li>
                 </>
               ) : (
                 <>

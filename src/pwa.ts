@@ -56,9 +56,11 @@ export function registerPWA() {
     return;
   }
 
-  // Capture install prompt event
+  // Capture install prompt event. Sin preventDefault(): Chrome muestra su
+  // propia mini-infobar nativa automáticamente; guardamos el evento igual
+  // para que la tarjeta propia (solo informativa) pueda relanzarlo a mano
+  // si el usuario la cerró antes de verla.
   window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
     deferredPrompt = e as BeforeInstallPromptEvent;
     console.log('[PWA] beforeinstallprompt event captured');
     installableListeners.forEach((cb) => cb(true));
@@ -68,6 +70,18 @@ export function registerPWA() {
     console.log('[PWA] App successfully installed!');
     deferredPrompt = null;
     installableListeners.forEach((cb) => cb(false));
+  });
+
+  // Recarga la pestaña cuando una versión nueva del SW toma el control.
+  // Sin esto, clients.claim() hace que las peticiones futuras vayan por el
+  // SW nuevo pero el JS de React ya cargado en memoria sigue siendo el
+  // viejo indefinidamente — una pestaña abierta antes de un deploy se
+  // queda mostrando la UI anterior hasta que el usuario recarga a mano.
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
   });
 
   // Register Service Worker on page load

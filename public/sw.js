@@ -2,7 +2,7 @@
 // LyAi Prensa PWA — Service Worker (High-Performance 3D Wall & Offline Feed Shell)
 // ============================================================================
 
-const CACHE_VERSION = 'lyai-prensa-v1.0.0';
+const CACHE_VERSION = 'lyai-prensa-v1.5.1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
