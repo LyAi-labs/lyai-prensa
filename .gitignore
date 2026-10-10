@@ -29,3 +29,7 @@ venv/
 test-results/
 playwright-report/
 e2e/screenshots/
+.playwright-mcp/
+
+# QA / debug output (regenerable, no es fuente)
+qa_reports/
