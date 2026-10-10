@@ -292,9 +292,9 @@ def get_httpx_client() -> httpx.AsyncClient:
 @app.head("/api/image-proxy")
 async def image_proxy(url: str = Query(...)):
     """Proxy y optimizador de imágenes para el muro 3D y vista bento.
-    Descarga la imagen remota, la redimensiona a thumbnail (máx 480x320)
+    Descarga la imagen remota, la redimensiona a thumbnail (máx 960x640)
     y la comprime a WebP, guardándola en caché en disco.
-    Reduce imágenes pesadas (hasta 8MB) a ~25KB (97% de ahorro) y responde en <2ms."""
+    Reduce imágenes pesadas (hasta 8MB) manteniendo nitidez en las cards 3D."""
     if not url or not (url.startswith("http://") or url.startswith("https://")):
         return Response(status_code=400, content="URL inválida")
 
@@ -335,7 +335,7 @@ async def image_proxy(url: str = Query(...)):
         try:
             from PIL import Image
             img = Image.open(io.BytesIO(raw_bytes))
-            img.thumbnail((480, 320), Image.Resampling.LANCZOS)
+            img.thumbnail((960, 640), Image.Resampling.LANCZOS)
             if img.mode in ("RGBA", "LA", "P"):
                 img = img.convert("RGB")
             elif img.mode != "RGB":
