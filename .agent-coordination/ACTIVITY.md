@@ -165,3 +165,9 @@ que no se ven en tiempo real. Ver
 - Tarjetas de navegación del muro (`drawFloorArrow`) rediseñadas: fecha protagonista + pill-button
   real (spotlight-card + button.tsx de lyai-shared como referencia). Commit local, sin push
   (veto de Aurelius activo, SEC-021/022, no relacionado — avisar a Ignacio antes de push).
+
+## 2026-10-10 (cont. 5) — Claude Code
+- Desplegado a producción (EJECUTA de Ignacio): `docker-compose build --no-cache prensa` +
+  `up -d --force-recreate prensa`, commit `3d5f3d4`. Incluye: dropdown de búsqueda en vivo,
+  tarjetas de navegación del muro con fecha+pill-button. Verificado con Playwright contra
+  prensa.lyai.es: 200, sin errores de consola nuevos.
