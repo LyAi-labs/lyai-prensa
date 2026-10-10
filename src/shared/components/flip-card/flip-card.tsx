@@ -66,7 +66,8 @@ export function FlipCard({
   const [internal, setInternal] = useState(defaultFlipped)
   const controlled = flipped !== undefined
   const isFlipped = controlled ? flipped : internal
-  const spot = useSpotlight(ref, tilt)
+  // Cuando la tarjeta está girada mostrando el reverso, desactivar por completo el tilt 3D y hover
+  const spot = useSpotlight(ref, isFlipped ? 0 : tilt)
 
   const toggle = () => {
     if (disabled) return
@@ -89,8 +90,8 @@ export function FlipCard({
       ref={ref}
       className={`ls-flip${isFlipped ? ' is-flipped' : ''}${className ? ` ${className}` : ''}`}
       style={rootStyle}
-      onPointerMove={spot.onPointerMove}
-      onPointerLeave={spot.onPointerLeave}
+      onPointerMove={isFlipped ? undefined : spot.onPointerMove}
+      onPointerLeave={isFlipped ? undefined : spot.onPointerLeave}
       onClick={stopClickPropagation ? (e) => e.stopPropagation() : undefined}
     >
       <div className="ls-flip-tilt">

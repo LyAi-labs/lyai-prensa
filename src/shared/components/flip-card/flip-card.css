@@ -2,6 +2,13 @@
    Variables: --ls-accent-rgb (spotlight; cae a --c-rgb), --ls-flip-radius, --ls-flip-bg,
    --ls-flip-border, --ls-flip-shadow, --ls-flip-back-bg. */
 
+html.light {
+  --ls-flip-bg: #ffffff;
+  --ls-flip-border: rgba(0, 0, 0, 0.12);
+  --ls-flip-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.18);
+  --ls-flip-back-bg: linear-gradient(160deg, #ffffff 0%, #f8fafc 75%);
+}
+
 .ls-flip {
   position: relative;
   --mx: 50%;
@@ -118,6 +125,38 @@
   visibility: visible;
   transform: perspective(900px) rotateY(0deg);
   transition: transform 0.28s ease-out 0.28s, visibility 0s linear 0.28s;
+}
+
+/* ── Desactivación TOTAL de hover, lift, tilt y brillos al girar ── */
+.ls-flip.is-flipped,
+.ls-flip.is-flipped:hover {
+  --lift: 0px !important;
+  --rx: 0deg !important;
+  --ry: 0deg !important;
+}
+
+.ls-flip.is-flipped .ls-flip-tilt,
+.ls-flip.is-flipped:hover .ls-flip-tilt {
+  transform: none !important;
+  transition: none !important;
+}
+
+.ls-flip.is-flipped .ls-flip-face::before,
+.ls-flip.is-flipped .ls-flip-face::after,
+.ls-flip.is-flipped:hover .ls-flip-face::before,
+.ls-flip.is-flipped:hover .ls-flip-face::after,
+.ls-flip.is-flipped .spotlight-glow,
+.ls-flip.is-flipped .spotlight-border,
+.ls-flip.is-flipped .spotlight-card::before,
+.ls-flip.is-flipped .spotlight-card::after,
+.ls-flip.is-flipped:hover .spotlight-glow,
+.ls-flip.is-flipped:hover .spotlight-border,
+.ls-flip.is-flipped:hover .spotlight-card::before,
+.ls-flip.is-flipped:hover .spotlight-card::after {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* Anillo de progreso de use-dwell (--dwell 0→1 mientras se «para») */

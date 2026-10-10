@@ -1,13 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 // `base` es env-driven en build: `VITE_BASE=/` para servir en la raíz
 // (docker/nginx sirviendo prensa.lyai.es), o `/lyai-prensa/` para GH Pages.
 // Default sigue siendo `/lyai-prensa/` para no romper el workflow existente.
 // En `npm run dev` es siempre `/`.
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? (process.env.VITE_BASE ?? '/lyai-prensa/') : '/',
+  base: command === 'build' ? (process.env.VITE_BASE ?? '/') : '/',
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   server: {
     port: 3000,
     host: true,

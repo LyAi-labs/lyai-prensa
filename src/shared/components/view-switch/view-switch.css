@@ -36,3 +36,20 @@
   .ls-vs { top: 62px; }
   .ls-vs-btn { padding: 6px 11px; font-size: 11px; }
 }
+
+/* ── Light Theme Overrides ────────────────────────────────────────── */
+html.light .ls-vs {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+html.light .ls-vs-btn {
+  color: #64748b;
+}
+html.light .ls-vs-btn:hover {
+  color: #0f172a;
+}
+html.light .ls-vs-btn.is-on {
+  background: rgba(14, 165, 233, 0.15);
+  color: #0284c7;
+}

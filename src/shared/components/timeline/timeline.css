@@ -73,3 +73,20 @@
   .ls-tl-full { grid-template-columns: 1fr; }
   .ls-tl-full > * { margin: 0 0 0 30px; }
 }
+
+/* ── Light Theme Overrides ────────────────────────────────────────── */
+html.light .ls-tl-dot {
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #e2e8f0;
+}
+html.light .ls-tl-time {
+  color: #64748b;
+}
+html.light .ls-tl-sep span {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #334155;
+}
+html.light .ls-tl-note {
+  color: #64748b;
+}
