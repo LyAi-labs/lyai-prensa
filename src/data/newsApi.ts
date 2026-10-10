@@ -130,6 +130,16 @@ export async function fetchNoticias(limit = 108, offset = 0, antes?: string, fil
   const data: ApiNoticia[] = await res.json()
   return data.map(mapNoticia)
 }
+export async function fetchNoticiaById(id: string): Promise<NewsItem | null> {
+  try {
+    const res = await fetch(`${API_BASE}/noticias/${id}`)
+    if (!res.ok) return null
+    const data: ApiNoticia = await res.json()
+    return mapNoticia(data)
+  } catch {
+    return null
+  }
+}
 
 // Total real para el contador del muro, con los mismos filtros aplicados —
 // antes del toolbar el total iba hardcodeado (3330) en WallGL.tsx; con
@@ -143,15 +153,56 @@ export async function fetchNoticiasCount(antes?: string, filters?: NewsFilters):
   return data.total
 }
 
-// YYYY-MM-DD de los días (en [desde, hasta)) con al menos una contradicción
+export interface DiaContradiccionInfo {
+  dia: string
+  count: number
+  noticiasCount: number
+}
+
+// Días (en [desde, hasta)) con contradicciones y su recuento
 // — para marcarlos en el calendario del botón "Hoy". `hasta` es exclusivo.
-export async function fetchDiasContradiccion(desde: string, hasta: string): Promise<Set<string>> {
+export async function fetchDiasContradiccion(
+  desde: string,
+  hasta: string
+): Promise<Map<string, DiaContradiccionInfo>> {
   const params = new URLSearchParams({ desde, hasta })
   const res = await fetch(`${API_BASE}/contradicciones/dias?${params}`)
   if (!res.ok) throw new Error(`API /contradicciones/dias respondió ${res.status}`)
-  const data: string[] = await res.json()
-  return new Set(data)
+  const data: Array<string | { dia: string; count: number; noticias_count?: number }> = await res.json()
+  const map = new Map<string, DiaContradiccionInfo>()
+  for (const item of data) {
+    if (typeof item === 'string') {
+      map.set(item, { dia: item, count: 1, noticiasCount: 1 })
+    } else {
+      map.set(item.dia, {
+        dia: item.dia,
+        count: item.count,
+        noticiasCount: item.noticias_count ?? item.count,
+      })
+    }
+  }
+  return map
 }
+
+export interface ContradiccionesConteo {
+  totalContradicciones: number
+  totalNoticias: number
+}
+
+export async function fetchContradiccionesConteo(): Promise<ContradiccionesConteo> {
+  try {
+    const res = await fetch(`${API_BASE}/contradicciones/conteo`)
+    if (!res.ok) throw new Error(`API /contradicciones/conteo respondió ${res.status}`)
+    const data = await res.json()
+    return {
+      totalContradicciones: data.total_contradicciones ?? 0,
+      totalNoticias: data.total_noticias ?? 0,
+    }
+  } catch {
+    return { totalContradicciones: 0, totalNoticias: 0 }
+  }
+}
+
 
 // Número de medios (para la pantalla de carga) — se cuenta en vivo en vez de
 // hardcodear una cifra que se queda vieja.
