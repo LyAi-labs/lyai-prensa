@@ -578,7 +578,13 @@ function makeHaloTexture(): THREE.CanvasTexture {
   return tex
 }
 
-function drawFloorArrow(isRight: boolean, targetPage: number): HTMLCanvasElement {
+// Tarjeta de navegación entre páginas del muro — fecha protagonista (avanzar
+// de página es ir a noticias más antiguas, orden cronológico) + pill-button
+// real en vez del círculo+texto suelto de antes. Recipe de
+// lyai-shared/components/spotlight-card (glow radial + borde translúcido) y
+// lyai-shared/components/ui/button.tsx variante outline (borde + fondo
+// translúcido + icono). Ver dev-xplain 2026-10-10-1715-nav-cards-fecha.
+function drawFloorArrow(isRight: boolean, targetPage: number, dateLabel: string | null): HTMLCanvasElement {
   const W = 340
   const H = 160
   const c = document.createElement('canvas')
@@ -588,91 +594,101 @@ function drawFloorArrow(isRight: boolean, targetPage: number): HTMLCanvasElement
   ctx.scale(TEX_SCALE, TEX_SCALE)
 
   const isLight = document.documentElement.classList.contains('light')
-  const mainColor = isRight ? '#00e5ff' : '#a855f7'
-  const glowColor = isRight ? 'rgba(0, 229, 255, 0.12)' : 'rgba(168, 85, 247, 0.12)'
+  const mainColor = isRight ? '#22d3ee' : '#c084fc' // spotlightRGB cyan/purple
+  const mainRGB = isRight ? '34, 211, 238' : '192, 132, 252'
+  const baseBg = isLight ? '#f4f6fb' : '#0b0c14'
+  const textColor = isLight ? '#0f172a' : '#ffffff'
+  const hintColor = isLight ? 'rgba(15, 23, 42, 0.45)' : 'rgba(255, 255, 255, 0.4)'
 
-  // Fondo glassmorphic con esquinas suaves
-  roundRectPath(ctx, 4, 4, W - 8, H - 8, 18)
-  const bgGrad = ctx.createLinearGradient(0, 0, W, H)
-  if (isLight) {
-    bgGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)')
-    bgGrad.addColorStop(1, 'rgba(241, 245, 249, 0.92)')
-  } else {
-    bgGrad.addColorStop(0, 'rgba(15, 23, 42, 0.92)')
-    bgGrad.addColorStop(1, 'rgba(10, 15, 28, 0.95)')
-  }
-  ctx.fillStyle = bgGrad
+  // Fondo spotlight-card: base plana + glow radial centrado + borde sutil
+  roundRectPath(ctx, 4, 4, W - 8, H - 8, 22)
+  ctx.fillStyle = baseBg
   ctx.fill()
+  ctx.save()
+  ctx.clip()
+  const glow = ctx.createRadialGradient(W / 2, 64, 0, W / 2, 64, 150)
+  glow.addColorStop(0, `rgba(${mainRGB}, ${isLight ? 0.14 : 0.16})`)
+  glow.addColorStop(1, `rgba(${mainRGB}, 0)`)
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, W, H)
+  ctx.restore()
 
-  // Sutil resplandor interior
-  ctx.fillStyle = glowColor
-  ctx.fill()
-
-  // Borde fino elegante
-  ctx.strokeStyle = mainColor
-  ctx.lineWidth = 1.8
+  roundRectPath(ctx, 4, 4, W - 8, H - 8, 22)
+  ctx.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.06)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  roundRectPath(ctx, 5, 5, W - 10, H - 10, 21)
+  ctx.strokeStyle = `rgba(${mainRGB}, 0.35)`
+  ctx.lineWidth = 1
   ctx.stroke()
 
   // Pill badge en la parte superior
   const badgeText = isRight ? 'HISTÓRICO ANTERIOR' : 'NOTICIAS RECIENTES'
-  ctx.font = `700 11px ${FONT}`
-  const badgeW = ctx.measureText(badgeText).width + 24
+  ctx.font = `700 10.5px ${FONT}`
+  const badgeW = ctx.measureText(badgeText).width + 22
   const badgeX = (W - badgeW) / 2
-  const badgeY = 18
-  roundRectPath(ctx, badgeX, badgeY, badgeW, 22, 11)
-  ctx.fillStyle = isRight ? 'rgba(0, 229, 255, 0.12)' : 'rgba(168, 85, 247, 0.12)'
+  const badgeY = 16
+  roundRectPath(ctx, badgeX, badgeY, badgeW, 20, 10)
+  ctx.fillStyle = `rgba(${mainRGB}, 0.1)`
   ctx.fill()
-  ctx.strokeStyle = mainColor
+  ctx.strokeStyle = `rgba(${mainRGB}, 0.4)`
   ctx.lineWidth = 1
   ctx.stroke()
-
   ctx.fillStyle = mainColor
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(badgeText, W / 2, badgeY + 11)
+  ctx.fillText(badgeText, W / 2, badgeY + 10)
 
-  // Círculo del icono central con flecha
-  const circleX = W / 2
-  const circleY = 72
-  const circleR = 20
-  ctx.beginPath()
-  ctx.arc(circleX, circleY, circleR, 0, Math.PI * 2)
-  ctx.fillStyle = isRight ? 'rgba(0, 229, 255, 0.18)' : 'rgba(168, 85, 247, 0.18)'
+  // Fecha como protagonista — avanzar de página cambia de fecha (orden
+  // cronológico), así que es lo primero que el usuario necesita leer.
+  ctx.font = `800 26px ${FONT}`
+  ctx.shadowColor = `rgba(${mainRGB}, 0.55)`
+  ctx.shadowBlur = 14
+  ctx.fillStyle = textColor
+  ctx.fillText(dateLabel ?? '—', W / 2, 76)
+  ctx.shadowBlur = 0
+
+  // Pill-button real (borde + fondo translúcido + chevron + label)
+  const label = `Página ${targetPage + 1}`
+  ctx.font = `700 12px ${FONT}`
+  const pillW = ctx.measureText(label).width + 36 + 14
+  const pillH = 30
+  const pillX = (W - pillW) / 2
+  const pillY = 112
+  roundRectPath(ctx, pillX, pillY, pillW, pillH, pillH / 2)
+  ctx.fillStyle = `rgba(${mainRGB}, 0.12)`
   ctx.fill()
-  ctx.strokeStyle = mainColor
-  ctx.lineWidth = 1.5
+  ctx.strokeStyle = `rgba(${mainRGB}, 0.5)`
+  ctx.lineWidth = 1.3
   ctx.stroke()
 
-  // Dibujar vector de la flecha / chevron
+  const chevCX = pillX + 20
+  const chevCY = pillY + pillH / 2
   ctx.beginPath()
-  ctx.strokeStyle = '#ffffff'
-  ctx.lineWidth = 2.5
+  ctx.strokeStyle = mainColor
+  ctx.lineWidth = 2
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   if (isRight) {
-    ctx.moveTo(circleX - 4, circleY - 7)
-    ctx.lineTo(circleX + 4, circleY)
-    ctx.lineTo(circleX - 4, circleY + 7)
+    ctx.moveTo(chevCX - 3, chevCY - 5)
+    ctx.lineTo(chevCX + 3, chevCY)
+    ctx.lineTo(chevCX - 3, chevCY + 5)
   } else {
-    ctx.moveTo(circleX + 4, circleY - 7)
-    ctx.lineTo(circleX - 4, circleY)
-    ctx.lineTo(circleX + 4, circleY + 7)
+    ctx.moveTo(chevCX + 3, chevCY - 5)
+    ctx.lineTo(chevCX - 3, chevCY)
+    ctx.lineTo(chevCX + 3, chevCY + 5)
   }
   ctx.stroke()
 
-  // Título principal
-  ctx.font = `700 16px ${FONT}`
-  ctx.fillStyle = isLight ? '#0f172a' : '#ffffff'
+  ctx.fillStyle = textColor
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const actionText = isRight ? `Avanzar a Página ${targetPage + 1}` : `Volver a Página ${targetPage + 1}`
-  ctx.fillText(actionText, W / 2, 112)
+  ctx.fillText(label, pillX + pillW / 2 + 10, chevCY)
 
-  // Subtítulo
-  ctx.font = `500 12px ${FONT}`
-  ctx.fillStyle = isLight ? '#64748b' : 'rgba(255, 255, 255, 0.55)'
-  const hintText = 'Haz clic para navegar'
-  ctx.fillText(hintText, W / 2, 134)
+  // Hint discreto debajo del pill
+  ctx.font = `500 10.5px ${FONT}`
+  ctx.fillStyle = hintColor
+  ctx.fillText('Haz clic para navegar', W / 2, pillY + pillH + 14)
 
   return c
 }
@@ -1070,7 +1086,9 @@ export default function WallGL({
 
       // Tarjeta Derecha (Avanzar / Noticias Anteriores en el tiempo)
       if ((page + 1) * PAGE_SIZE < totalCount) {
-        const rightNavTex = new THREE.CanvasTexture(drawFloorArrow(true, page + 1))
+        const oldestShown = items[items.length - 1]
+        const rightDateLabel = oldestShown ? fechaCorta(oldestShown.publishedAt).dia : null
+        const rightNavTex = new THREE.CanvasTexture(drawFloorArrow(true, page + 1, rightDateLabel))
         rightNavTex.colorSpace = THREE.SRGBColorSpace
         const rightNavMat = new THREE.MeshBasicMaterial({ map: rightNavTex, transparent: true })
         disposables.push(rightNavTex, rightNavMat)
@@ -1084,7 +1102,9 @@ export default function WallGL({
 
       // Tarjeta Izquierda (Volver / Noticias Recientes)
       if (page > 0) {
-        const leftNavTex = new THREE.CanvasTexture(drawFloorArrow(false, Math.max(0, page - 1)))
+        const newestShown = items[0]
+        const leftDateLabel = newestShown ? fechaCorta(newestShown.publishedAt).dia : null
+        const leftNavTex = new THREE.CanvasTexture(drawFloorArrow(false, Math.max(0, page - 1), leftDateLabel))
         leftNavTex.colorSpace = THREE.SRGBColorSpace
         const leftNavMat = new THREE.MeshBasicMaterial({ map: leftNavTex, transparent: true })
         disposables.push(leftNavTex, leftNavMat)
