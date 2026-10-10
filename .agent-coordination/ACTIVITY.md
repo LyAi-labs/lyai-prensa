@@ -155,3 +155,8 @@ que no se ven en tiempo real. Ver
 - Bug reportado por Ignacio: "Catálogo" en la miga de pan del panel lyai-shared parecía clicable
   (estilo 21st.dev) pero era texto plano — no volvía a /panel/. Convertido en enlace real.
   Backup: index.html.bak-20261010-pre-breadcrumb-link.
+
+## 2026-10-10 (cont. 3) — Claude Code
+- Card de "lyai-shared" en /panel/ (índice general) sin imagen, a diferencia de las demás —
+  añadida miniatura real (captura del panel rediseñado, thumbs/lyai-shared.png) + contador
+  actualizado a 49 ÍTEMS. Backup: panel/index.html.bak-20261010-pre-lyai-shared-thumb.
