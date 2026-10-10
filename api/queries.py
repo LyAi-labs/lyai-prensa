@@ -33,11 +33,10 @@ def build_noticias_where(
     """Devuelve (fragmento WHERE sin la palabra WHERE, params) listo para
     intercalar en SELECT_NOTICIAS_FILTRADO_SQL o COUNT_NOTICIAS_FILTRADO_SQL."""
     condiciones = ["1=1"]
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = {"antes": antes}
 
     if antes is not None:
         condiciones.append("n.publicada_en <= %(antes)s")
-        params["antes"] = antes
 
     if q:
         condiciones.append("(n.titular ILIKE %(q)s OR n.descripcion ILIKE %(q)s)")
@@ -67,22 +66,48 @@ def build_noticias_where(
 
 def select_noticias_filtrado_sql(where: str) -> str:
     return f"""
-SELECT n.id, n.titular, n.descripcion, n.enlace, n.publicada_en, n.imagen_url,
-       n.intensidad_contradiccion, n.eje_z,
-       f.nombre AS fuente_nombre, f.color AS fuente_color, f.slug AS fuente_slug
-FROM prensa.noticias n
-JOIN prensa.fuentes f ON f.id = n.fuente_id
-WHERE {where}
-ORDER BY n.publicada_en DESC
+WITH ranked AS (
+    SELECT n.id, n.titular, n.descripcion, n.enlace, n.publicada_en, n.imagen_url,
+           n.intensidad_contradiccion, n.eje_z,
+           f.nombre AS fuente_nombre, f.color AS fuente_color, f.slug AS fuente_slug,
+           ROW_NUMBER() OVER (
+               PARTITION BY lower(trim(regexp_replace(n.titular, '\\s+', ' ', 'g'))), date_trunc('week', n.publicada_en)
+               ORDER BY n.intensidad_contradiccion DESC, n.publicada_en ASC, n.id ASC
+           ) AS rn
+    FROM prensa.noticias n
+    JOIN prensa.fuentes f ON f.id = n.fuente_id
+    WHERE {where}
+)
+SELECT id, titular, descripcion, enlace, publicada_en, imagen_url,
+       intensidad_contradiccion, eje_z,
+       fuente_nombre, fuente_color, fuente_slug
+FROM ranked
+WHERE rn = 1
+ORDER BY 
+    CASE 
+        WHEN %(antes)s IS NOT NULL AND intensidad_contradiccion > 0 AND date_trunc('day', publicada_en) = date_trunc('day', %(antes)s::timestamptz) THEN 1
+        WHEN %(antes)s IS NULL AND intensidad_contradiccion > 0 AND publicada_en >= NOW() - INTERVAL '3 days' THEN 1
+        ELSE 2
+    END ASC,
+    publicada_en DESC
 LIMIT %(limit)s OFFSET %(offset)s;
 """
 
 
 def count_noticias_filtrado_sql(where: str) -> str:
     return f"""
+WITH ranked AS (
+    SELECT n.id,
+           ROW_NUMBER() OVER (
+               PARTITION BY lower(trim(regexp_replace(n.titular, '\\s+', ' ', 'g'))), date_trunc('week', n.publicada_en)
+               ORDER BY n.intensidad_contradiccion DESC, n.publicada_en ASC, n.id ASC
+           ) AS rn
+    FROM prensa.noticias n
+    WHERE {where}
+)
 SELECT count(*)
-FROM prensa.noticias n
-WHERE {where};
+FROM ranked
+WHERE rn = 1;
 """
 
 # Trae, para el conjunto de noticias ya paginado, todas las contradicciones
@@ -113,23 +138,25 @@ ORDER BY nombre;
 """
 
 # Días (dentro de [desde, hasta)) que tienen al menos una contradicción —
-# para marcarlos en el calendario del muro. Cuenta un día si CUALQUIERA de
-# las dos noticias del par se publicó ese día (pueden diferir de fecha).
+# para marcarlos en el calendario del muro con su número de contradicciones.
 SELECT_DIAS_CONTRADICCION_SQL = """
-SELECT DISTINCT (dia)::date AS dia FROM (
-    SELECT na.publicada_en AS dia
+SELECT (dia)::date AS dia, count(DISTINCT ctr_id) AS count, count(DISTINCT noticia_id) AS noticias_count
+FROM (
+    SELECT na.publicada_en AS dia, ctr.id AS ctr_id, na.id AS noticia_id
     FROM prensa.contradicciones ctr
     JOIN prensa.claims ca ON ca.id = ctr.claim_a_id
     JOIN prensa.noticias na ON na.id = ca.noticia_id
     UNION ALL
-    SELECT nb.publicada_en AS dia
+    SELECT nb.publicada_en AS dia, ctr.id AS ctr_id, nb.id AS noticia_id
     FROM prensa.contradicciones ctr
     JOIN prensa.claims cb ON cb.id = ctr.claim_b_id
     JOIN prensa.noticias nb ON nb.id = cb.noticia_id
 ) d
 WHERE dia >= %(desde)s AND dia < %(hasta)s
+GROUP BY 1
 ORDER BY 1;
 """
+
 
 
 def build_contradicciones_por_noticia(rows: list[dict[str, Any]]) -> dict[Any, list[dict[str, Any]]]:

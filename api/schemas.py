@@ -44,3 +44,10 @@ class FuenteOut(BaseModel):
 class HealthOut(BaseModel):
     status: str
     db: bool
+
+
+class DiaContradiccionOut(BaseModel):
+    dia: str
+    count: int
+    noticias_count: int
+
