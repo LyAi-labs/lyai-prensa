@@ -142,3 +142,11 @@ que no se ven en tiempo real. Ver
   del registry) + estado, rails "Estables"/"Últimos en el registro" con thumbnails reales, tabs,
   logo Λ de LyAi. Lógica de búsqueda/modal preservada sin regresión (verificado con Playwright).
   Backup: index.html.bak-20261010-pre-21stdev-layout.
+
+## 2026-10-10 (cont.) — Claude Code
+- `works-wheel` identificado en el panel: alta en registry.json/data.json (estaba el código en
+  disco sin indexar, commiteado ahora) + thumbnail real recortada de una captura que pasó Ignacio.
+- Deep-linking por hash en `dev.lyai.pro/panel/lyai-shared/`: `#<short>` abre el modal de ese
+  componente directamente (carga inicial + hashchange), Escape cierra, el hash se limpia al
+  cerrar. Así se puede pasar el enlace de una ficha concreta a otro agente.
+  Backup: index.html.bak-20261010-pre-deeplink.
