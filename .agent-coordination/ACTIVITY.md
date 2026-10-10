@@ -135,3 +135,10 @@ que no se ven en tiempo real. Ver
 - Dev-xplain publicado: https://dev.lyai.pro/dev-xplain/2026-10-10-1530-search-dropdown-live/
   (dropdown inline con resultados reales vía `/api/archivo/noticias?q=`, contradicciones en rojo).
 - Pendiente de "aplica" de Ignacio antes de tocar código. Nada editado aún en `src/`.
+
+## 2026-10-10 (cont.) — Claude Code
+- Reestructurado `/var/www/dev.lyai.pro/panel/lyai-shared/index.html` (fuera de este repo, pero
+  mismo hilo de trabajo): layout tipo 21st.dev — sidebar con categorías reales (derivadas de tags
+  del registry) + estado, rails "Estables"/"Últimos en el registro" con thumbnails reales, tabs,
+  logo Λ de LyAi. Lógica de búsqueda/modal preservada sin regresión (verificado con Playwright).
+  Backup: index.html.bak-20261010-pre-21stdev-layout.
