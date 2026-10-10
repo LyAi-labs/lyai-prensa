@@ -160,3 +160,8 @@ que no se ven en tiempo real. Ver
 - Card de "lyai-shared" en /panel/ (índice general) sin imagen, a diferencia de las demás —
   añadida miniatura real (captura del panel rediseñado, thumbs/lyai-shared.png) + contador
   actualizado a 49 ÍTEMS. Backup: panel/index.html.bak-20261010-pre-lyai-shared-thumb.
+
+## 2026-10-10 (cont. 4) — Claude Code
+- Tarjetas de navegación del muro (`drawFloorArrow`) rediseñadas: fecha protagonista + pill-button
+  real (spotlight-card + button.tsx de lyai-shared como referencia). Commit local, sin push
+  (veto de Aurelius activo, SEC-021/022, no relacionado — avisar a Ignacio antes de push).
