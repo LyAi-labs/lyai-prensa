@@ -153,6 +153,24 @@ La galería parallax (`feature/muro-parallax-unfurling`, /v2) solo se diferencia
 
 ---
 
+## 🗃️ Archivo para periodistas — `prensa.lyai.es/archivo` (2026-10-10)
+
+Explorador público de solo lectura sobre toda la base: noticias, contradicciones, afirmaciones, medios y
+método. **No es parte de la SPA del muro**: es una página estática propia, `public/archivo/index.html`
+(JS a pelo, sin dependencias ni peticiones a terceros), que nginx sirve para todo `/archivo*`
+(`docker/nginx.conf`). Su API es `api/archivo.py` (`/api/archivo/*`), con límite de 120 peticiones/min por IP.
+
+- Cada ficha tiene URL propia: `/archivo/noticia/<id>` y `/archivo/contradiccion/<idA>_<idB>`.
+- Las contradicciones se muestran **agrupadas por pareja de noticias** (en la base son pares de afirmaciones).
+- Filtra los datos de prueba (`claims.extractor = 'seed'`) y las noticias con fecha futura; siguen en la base.
+- Se renderiza en el navegador: para SEO serio haría falta servir el HTML ya montado desde el servidor.
+- Mockup aprobado: https://dev.lyai.pro/dev-xplain/2026-10-10-0850-prensa-explorador-periodistas/
+- Volver atrás: `docker tag lyai-prensa:pre-archivo-20261010 lyai-prensa:latest` (ídem `lyai-prensa-api`) y
+  `docker-compose up -d --no-deps --no-build api prensa`.
+  <!-- verify: test -f /opt/lyai/app/lyai-prensa/public/archivo/index.html && test -f /opt/lyai/app/lyai-prensa/api/archivo.py -->
+
+---
+
 ## 🧩 Componentes compartidos (`src/shared/`) y veto — 2026-10-02
 
 - `src/shared/` es **copia sincronizada de `/opt/lyai/app/lyai-shared`** (flip-card, anchored-overlay, view-switch, splash-screen,

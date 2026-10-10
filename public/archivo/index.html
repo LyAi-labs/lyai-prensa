@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archivo del observatorio de prensa</title>
+<meta name="description" content="Archivo abierto del observatorio de prensa española: todas las noticias recogidas, las afirmaciones extraídas y las contradicciones detectadas entre medios. Búsqueda, filtros y descarga en CSV.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+/* Sin fuentes ni scripts de terceros: nada de lo que carga esta página sale del servidor. */
+:root{
+  --paper:#f6f4ee; --card:#fffdf8; --ink:#1b1a17; --dim:#6b675e; --line:#dedacd; --line2:#ebe7db;
+  --red:#b3261e; --red-bg:#fbeceb; --blue:#1f4e8c; --ok:#2c6e49; --amber:#8a5a00; --chip:#efece2;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+header.top{border-bottom:1px solid var(--line);background:var(--card)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.brand{display:flex;align-items:baseline;gap:14px;padding:18px 0 6px;flex-wrap:wrap}
+.brand h1{font:700 26px/1.1 var(--serif);margin:0;letter-spacing:-.01em}
+.brand .sub{color:var(--dim);font-size:13px;flex:1 1 300px}
+.brand .back{font-size:13px;font-weight:600;text-decoration:none;color:var(--blue);white-space:nowrap}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;margin-top:8px}
+nav.tabs a{padding:10px 14px;font:600 14px var(--sans);color:var(--dim);text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap}
+nav.tabs a .n{font-weight:500;color:#9a958a;margin-left:6px;font-size:12px}
+nav.tabs a[aria-current=page]{color:var(--ink);border-bottom-color:var(--ink)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:14px 0}
+.search{flex:1 1 320px;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:0 12px;height:40px}
+.search input{border:0;background:none;outline:0;flex:1;font:15px var(--sans);color:var(--ink);min-width:0}
+svg.ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.search svg{color:var(--dim)}
+select,.btn{height:40px;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:0 12px;font:500 14px var(--sans);color:var(--ink);cursor:pointer;max-width:100%}
+.btn{display:inline-flex;align-items:center;gap:7px;text-decoration:none}
+.btn.primary{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.count{color:var(--dim);font-size:13px;padding:0 0 10px;min-height:30px}
+.count b{color:var(--ink)}
+.tbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tbl th{font:600 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:#faf8f1;white-space:nowrap}
+.tbl td{padding:11px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr.go{cursor:pointer}.tbl tbody tr.go:hover{background:#faf7ee}
+.tit{font:600 16px/1.3 var(--serif)}
+.tit a{text-decoration:none}.tit a:hover{text-decoration:underline}
+.desc{color:var(--dim);font-size:13px;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.src{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+.when{color:var(--dim);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:1px 9px;font-size:12px;color:#4b473f;white-space:nowrap}
+.chip.red{background:var(--red-bg);color:var(--red);font-weight:600}
+.chip.amber{background:#f6ecd2;color:var(--amber);font-weight:600}
+.num{font-variant-numeric:tabular-nums;text-align:right}
+.none{color:#b8b3a6}
+mark{background:#ffe58a;color:inherit;padding:0 1px;border-radius:2px}
+.empty{padding:40px;text-align:center;color:var(--dim);background:var(--card);border:1px dashed var(--line);border-radius:10px}
+.more{display:flex;justify-content:center;padding:16px}
+.ctr{display:block;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:12px;text-decoration:none}
+.ctr:hover{border-color:#c9c3b2}
+.ctr .hd{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+.vs{display:grid;grid-template-columns:1fr 1fr}
+.vs>div{padding:12px 14px;min-width:0}.vs>div+div{border-left:1px solid var(--line2)}
+.claim{font:600 16px/1.35 var(--serif);margin:6px 0 4px}
+.claim em{font-style:normal;background:var(--red-bg);color:var(--red);padding:0 3px;border-radius:3px}
+.why{padding:10px 14px;border-top:1px solid var(--line2);font-size:13.5px;color:#3d3a33;background:#faf8f1;border-radius:0 0 10px 10px}
+.lbl{font:600 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:2px}
+.bars{height:8px;background:var(--line2);border-radius:4px;overflow:hidden;min-width:90px}.bars i{display:block;height:100%;background:#8f897a}
+.scrim{position:fixed;inset:0;background:rgba(27,26,23,.35);display:none;z-index:40}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(640px,100%);background:var(--card);border-left:1px solid var(--line);z-index:50;transform:translateX(100%);transition:transform .18s ease;overflow-y:auto;padding:22px 24px 40px}
+.open .scrim{display:block}.open .drawer{transform:none}
+@media (prefers-reduced-motion:reduce){.drawer{transition:none}}
+.drawer h2{font:700 24px/1.2 var(--serif);margin:10px 40px 8px 0}
+.drawer h3{font:600 11px var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:22px 0 8px}
+.url{display:flex;gap:8px;align-items:center}
+.url code{flex:1;background:#f1eee4;border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:12px var(--mono);color:#4b473f;word-break:break-all}
+.cl{border-left:3px solid var(--line);padding:4px 0 4px 12px;margin-bottom:10px}
+.cl.hit{border-left-color:var(--red)}
+.cita{display:block;color:var(--dim);font-size:13.5px;margin-top:2px}
+.x{position:absolute;top:14px;right:14px;border:0;background:none;cursor:pointer;color:var(--dim);padding:6px}
+.x svg{width:20px;height:20px}
+.choque{border:1px solid var(--line2);border-radius:8px;padding:12px;margin-bottom:10px}
+footer{color:var(--dim);font-size:12.5px;padding:26px 0 40px}
+@media (max-width:720px){
+  .vs{grid-template-columns:1fr}.vs>div+div{border-left:0;border-top:1px solid var(--line2)}
+  .hide-s{display:none}.brand h1{font-size:22px}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Archivo del observatorio</h1>
+      <span class="sub" id="sub">Prensa española, medio a medio</span>
+      <a class="back" href="/">Ver el muro en vivo →</a>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Secciones"></nav>
+  </div>
+</header>
+<main class="wrap" id="main"><div class="count" style="padding-top:20px">Cargando…</div></main>
+<div class="wrap"><footer>Datos de solo lectura, recogidos de los RSS públicos de cada medio. Se guarda titular, descripción y enlace; para leer la pieza completa hay que ir al medio. Las contradicciones las señala un modelo de lenguaje y no pasan revisión humana: se publica su razonamiento para que pueda discutirse.</footer></div>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Ficha"></aside>
+
+<script>
+const API = '/api/archivo', BASE = '/archivo';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtN = n => Number(n).toLocaleString('es-ES', {useGrouping:'always'});
+const fmtD = s => new Date(s).toLocaleString('es-ES', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '#';
+const SESGO = {izquierda:'Izquierda', centro_izq:'Centro-izq.', centro:'Centro', centro_der:'Centro-der.', derecha:'Derecha', desconocido:'Sin clasificar'};
+const IC = {
+  search:'<svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  down:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>',
+  ext:'<svg class="ic" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M10 6H6a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4"/></svg>',
+  x:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+};
+const TABS = [['', 'Noticias', 'noticias'], ['contradicciones', 'Contradicciones', 'contradicciones'], ['afirmaciones', 'Afirmaciones', 'afirmaciones'], ['medios', 'Medios', 'medios'], ['metodo', 'Cómo se detecta', null]];
+
+let R = null, FU = [], F = {};
+let st = {tab:'', q:'', medio:'', solo:'', tema:'', sesgo:'', lim:40};
+let seq = 0;
+
+async function api(path) {
+  const r = await fetch(API + path, {headers:{Accept:'application/json'}});
+  if (r.status === 429) throw new Error('Demasiadas peticiones seguidas. Espera un minuto y vuelve a intentarlo.');
+  if (r.status === 404) throw new Error('No existe esa ficha.');
+  if (!r.ok) throw new Error('El archivo no responde ahora mismo (error ' + r.status + ').');
+  return r.json();
+}
+const qs = o => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v !== '' && v != null) p.set(k, v); const s = p.toString(); return s ? '?' + s : ''; };
+
+function hi(text) {
+  text = String(text ?? '');
+  const words = norm(st.q).split(/\s+/).filter(w => w.length > 1);
+  if (!words.length) return esc(text);
+  const plain = norm(text);
+  if (plain.length !== text.length) return esc(text);
+  const hits = [];
+  words.forEach(w => { let p = plain.indexOf(w); while (p > -1) { hits.push([p, p + w.length]); p = plain.indexOf(w, p + w.length); } });
+  hits.sort((a, b) => a[0] - b[0]);
+  let out = '', i = 0;
+  for (const [a, b] of hits) { if (a < i) continue; out += esc(text.slice(i, a)) + '<mark>' + esc(text.slice(a, b)) + '</mark>'; i = b; }
+  return out + esc(text.slice(i));
+}
+const src = (nombre, color) => `<span class="src"><span class="dot" style="background:${esc(/^#[0-9a-f]{3,8}$/i.test(color || '') ? color : '#888')}"></span>${esc(nombre)}</span>`;
+const srcSlug = slug => src((F[slug] || {}).nombre || slug, (F[slug] || {}).color);
+const dec = v => String(v).replace('.', ',');
+
+function urlFor(s) {
+  const path = BASE + (s.tab ? '/' + s.tab : '');
+  return path + qs({q:s.q, medio:s.medio, solo:s.solo, tema:s.tema, orientacion:s.sesgo});
+}
+function readUrl() {
+  const parts = location.pathname.replace(/\/+$/, '').split('/').slice(2);
+  const p = new URLSearchParams(location.search);
+  const s = {tab:'', q:p.get('q') || '', medio:p.get('medio') || '', solo:p.get('solo') || '', tema:p.get('tema') || '', sesgo:p.get('orientacion') || '', lim:40};
+  let ficha = null;
+  if (parts[0] === 'noticia' && parts[1]) ficha = ['noticia', parts[1]];
+  else if (parts[0] === 'contradiccion' && parts[1]) { ficha = ['contradiccion', parts[1]]; s.tab = 'contradicciones'; }
+  else if (TABS.some(t => t[0] === parts[0])) s.tab = parts[0] || '';
+  return {s, ficha};
+}
+function go(patch, replace) {
+  st = {...st, lim:40, ...patch};
+  history[replace ? 'replaceState' : 'pushState'](null, '', urlFor(st));
+  closeFicha(true); render();
+}
+
+function tabs() {
+  const T = R ? R.totales : {};
+  const n = {noticias:T.noticias, contradicciones:T.contradicciones, afirmaciones:T.afirmaciones, medios:T.medios};
+  $('#tabs').innerHTML = TABS.map(([k, l, c]) => `<a href="${BASE}${k ? '/' + k : ''}" data-tab="${k}" ${st.tab === k ? 'aria-current="page"' : ''}>${l}${c && n[c] != null ? `<span class="n">${fmtN(n[c])}</span>` : ''}</a>`).join('');
+}
+const medioSelect = () => `<select id="fMedio" aria-label="Medio"><option value="">Todos los medios</option>${FU.map(f => `<option value="${esc(f.slug)}" ${st.medio === f.slug ? 'selected' : ''}>${esc(f.nombre)}</option>`).join('')}</select>`;
+const searchBox = ph => `<label class="search">${IC.search}<input id="q" type="search" placeholder="${esc(ph)}" value="${esc(st.q)}" autocomplete="off" aria-label="Buscar"></label>`;
+const csvBtn = path => `<a class="btn" href="${esc(API + path)}" download>${IC.down}Descargar CSV</a>`;
+const fail = e => `<div class="empty">${esc(e.message)}</div>`;
+
+async function render() {
+  const my = ++seq; tabs();
+  const m = $('#main');
+  const keepFocus = document.activeElement && document.activeElement.id === 'q';
+  let html = '';
+  try {
+    if (st.tab === '') {
+      const f = {q:st.q, fuente:st.medio, solo:st.solo};
+      const d = await api('/noticias' + qs({...f, limit:st.lim}));
+      if (my !== seq) return;
+      html = `<div class="bar">${searchBox('Buscar en titulares y descripciones…')}${medioSelect()}
+        <select id="fSolo" aria-label="Mostrar"><option value="">Todas las noticias</option><option value="afirmaciones" ${st.solo === 'afirmaciones' ? 'selected' : ''}>Con afirmaciones extraídas</option><option value="contradiccion" ${st.solo === 'contradiccion' ? 'selected' : ''}>Con contradicción</option></select>
+        ${csvBtn('/noticias' + qs({...f, formato:'csv'}))}</div>
+        <div class="count"><b>${fmtN(d.total)}</b> ${d.total === 1 ? 'noticia' : 'noticias'}${st.q || st.medio || st.solo ? ' con estos filtros' : ''}, de la más reciente a la más antigua${d.total > 5000 ? ' · el CSV trae las 5.000 primeras' : ''}</div>
+        ${d.filas.length ? `<table class="tbl"><thead><tr><th>Publicada</th><th>Medio</th><th>Titular</th><th class="num hide-s">Afirm.</th><th class="hide-s"></th></tr></thead><tbody>
+        ${d.filas.map(n => `<tr class="go" data-href="${BASE}/noticia/${esc(n.id)}"><td class="when">${fmtD(n.publicada_en)}</td><td>${srcSlug(n.fuente)}</td>
+          <td><div class="tit"><a href="${BASE}/noticia/${esc(n.id)}" data-ficha>${hi(n.titular)}</a></div>${n.descripcion ? `<div class="desc">${hi(n.descripcion)}</div>` : ''}</td>
+          <td class="num hide-s">${n.afirmaciones || '<span class="none">—</span>'}</td><td class="hide-s">${n.contradicciones ? '<span class="chip red">contradicción</span>' : ''}</td></tr>`).join('')}
+        </tbody></table>${d.total > d.filas.length && st.lim < 200 ? `<div class="more"><button class="btn" id="more">Ver más</button></div>` : d.total > d.filas.length ? `<div class="count" style="padding-top:14px">Se muestran las 200 primeras. Afina la búsqueda o descarga el CSV para verlas todas.</div>` : ''}` : `<div class="empty">Ninguna noticia coincide. Prueba con menos palabras o quita un filtro.</div>`}`;
+    }
+    if (st.tab === 'contradicciones') {
+      const f = {q:st.q, fuente:st.medio};
+      const d = await api('/contradicciones' + qs(f));
+      if (my !== seq) return;
+      const side = (n, c) => `<div>${src(n.medio, n.color)} <span class="when">${fmtD(n.publicada_en)}</span>
+        <div class="claim">${hi(c.sujeto)} ${hi(c.predicado)} <em>${hi(c.objeto)}</em></div><div class="desc">${hi(n.titular)}</div></div>`;
+      html = `<div class="bar">${searchBox('Buscar en afirmaciones, titulares y razonamiento…')}${medioSelect()}${csvBtn('/contradicciones' + qs({...f, formato:'csv'}))}</div>
+        <div class="count"><b>${fmtN(d.total)}</b> ${d.total === 1 ? 'pareja de noticias que se contradice' : 'parejas de noticias que se contradicen'}, de la más reciente a la más antigua</div>
+        ${d.filas.length ? d.filas.map(s => { const c = s.choques[0]; return `<a class="ctr" href="${BASE}/contradiccion/${esc(s.id)}" data-ficha><div class="hd"><span class="chip red">Intensidad ${dec(s.intensidad)}</span>
+          ${s.choques.length > 1 ? `<span class="chip">${s.choques.length} afirmaciones enfrentadas</span>` : ''}${s.mismo_medio ? '<span class="chip amber">El mismo medio, dos versiones</span>' : ''}<span class="when">Detectada ${fmtD(s.detectada)}</span></div>
+          <div class="vs">${side(s.a, c.a)}${side(s.b, c.b)}</div><div class="why"><span class="lbl">Por qué se contradicen</span>${hi(c.razonamiento)}</div></a>`; }).join('') : `<div class="empty">Ninguna contradicción coincide con la búsqueda.</div>`}`;
+    }
+    if (st.tab === 'afirmaciones') {
+      const f = {q:st.q, fuente:st.medio, tema:st.tema};
+      const d = await api('/afirmaciones' + qs({...f, limit:st.lim}));
+      if (my !== seq) return;
+      html = `<div class="bar">${searchBox('Buscar quién dijo qué: «Rodalies», «SMI», «Ayuso»…')}${medioSelect()}
+        <select id="fTema" aria-label="Tema"><option value="">Todos los temas</option>${(R ? R.temas : []).map(t => `<option value="${esc(t.tema)}" ${st.tema === t.tema ? 'selected' : ''}>${esc(t.tema)} (${fmtN(t.n)})</option>`).join('')}</select>
+        ${csvBtn('/afirmaciones' + qs({...f, formato:'csv'}))}</div>
+        <div class="count"><b>${fmtN(d.total)}</b> afirmaciones · cada una es un hecho comprobable extraído de una noticia: quién, qué, cuánto</div>
+        ${d.filas.length ? `<table class="tbl"><thead><tr><th>Medio</th><th>Afirmación</th><th class="hide-s">Tema</th><th class="num hide-s">Confianza</th></tr></thead><tbody>
+        ${d.filas.map(c => `<tr class="go" data-href="${BASE}/noticia/${esc(c.noticia_id)}"><td>${srcSlug(c.fuente)}<div class="when">${fmtD(c.publicada_en)}</div></td>
+          <td><div class="tit"><a href="${BASE}/noticia/${esc(c.noticia_id)}" data-ficha>${hi(c.sujeto)} ${hi(c.predicado)} ${hi(c.objeto)}</a></div>${c.cita ? `<div class="desc">«${hi(c.cita)}»</div>` : ''}</td>
+          <td class="hide-s"><span class="chip">${esc(c.tema)}</span></td><td class="num hide-s">${c.confianza != null ? Math.round(c.confianza * 100) + ' %' : '—'}</td></tr>`).join('')}
+        </tbody></table>${d.total > d.filas.length && st.lim < 200 ? `<div class="more"><button class="btn" id="more">Ver más</button></div>` : ''}` : `<div class="empty">Ninguna afirmación coincide.</div>`}`;
+    }
+    if (st.tab === 'medios') {
+      const rows = FU.filter(f => (!st.sesgo || f.sesgo === st.sesgo) && (!st.q || norm(f.nombre).includes(norm(st.q))));
+      const max = Math.max(1, ...FU.map(f => f.noticias));
+      html = `<div class="bar">${searchBox('Buscar un medio…')}
+        <select id="fSesgo" aria-label="Orientación"><option value="">Toda orientación</option>${Object.entries(SESGO).map(([k, l]) => `<option value="${k}" ${st.sesgo === k ? 'selected' : ''}>${l}</option>`).join('')}</select>${csvBtn('/fuentes?formato=csv')}</div>
+        <div class="count"><b>${rows.length}</b> medios seguidos · pulsa uno para ver sus noticias</div>
+        <table class="tbl"><thead><tr><th>Medio</th><th class="hide-s">Orientación</th><th>Noticias recogidas</th><th class="num hide-s">Afirm.</th><th class="num">Contrad.</th></tr></thead><tbody>
+        ${rows.map(f => `<tr class="go" data-href="${BASE}${qs({medio:f.slug})}"><td><a href="${BASE}${qs({medio:f.slug})}" data-medio="${esc(f.slug)}" style="text-decoration:none">${src(f.nombre, f.color)}</a></td><td class="hide-s"><span class="chip">${esc(SESGO[f.sesgo] || f.sesgo || '—')}</span></td>
+          <td><div style="display:flex;gap:10px;align-items:center"><div class="bars" style="flex:1"><i style="width:${(f.noticias / max * 100).toFixed(1)}%"></i></div><span class="when" style="min-width:48px;text-align:right">${fmtN(f.noticias)}</span></div></td>
+          <td class="num hide-s">${fmtN(f.afirmaciones)}</td><td class="num">${f.contradicciones ? `<span class="chip red">${f.contradicciones}</span>` : '<span class="none">—</span>'}</td></tr>`).join('')}</tbody></table>`;
+    }
+    if (st.tab === 'metodo') {
+      const P = R.pares, T = R.totales, tot = Object.values(P).reduce((a, b) => a + b, 0) || 1;
+      const L = [['contradiccion', 'Contradicción', 'Los dos medios afirman cosas incompatibles sobre el mismo hecho.', 'var(--red)'], ['coincidencia', 'Coincidencia', 'Cuentan lo mismo.', 'var(--ok)'], ['ambiguo', 'Ambiguo', 'No se puede decidir con lo publicado.', 'var(--amber)'], ['no_relacionado', 'No relacionado', 'Se parecían, pero hablan de hechos distintos.', '#8f897a']];
+      html = `<div style="max-width:780px;padding-top:22px">
+        <h2 style="font:700 24px/1.2 var(--serif);margin:0 0 8px">Cómo llega una contradicción a esta página</h2>
+        <p>De cada noticia se extraen sus afirmaciones comprobables. Cada afirmación se compara con las más parecidas de otras noticias, y un modelo de lenguaje juzga cada pareja. No hay revisión humana: el veredicto y su razonamiento se publican tal cual para que puedas discutirlos.</p>
+        <p style="color:var(--dim)">Cobertura: hasta ahora se han analizado <b style="color:var(--ink)">${fmtN(T.noticias_analizadas)}</b> de las ${fmtN(T.noticias)} noticias del archivo (${dec((T.noticias_analizadas / T.noticias * 100).toFixed(1))} %). Una noticia sin contradicciones puede ser, sencillamente, una noticia que aún no se ha revisado.</p>
+        <div class="count" style="padding-top:8px"><b>${fmtN(tot)}</b> parejas de afirmaciones juzgadas</div>
+        <table class="tbl"><thead><tr><th>Veredicto</th><th>Qué significa</th><th>Parejas</th></tr></thead><tbody>
+        ${L.map(([k, l, d, c]) => `<tr><td style="font-weight:600;white-space:nowrap"><span class="dot" style="background:${c};margin-right:7px"></span>${l}</td><td style="color:var(--dim)">${d}</td>
+          <td><div style="display:flex;gap:10px;align-items:center"><div class="bars" style="flex:1"><i style="width:${Math.max(.6, (P[k] || 0) / tot * 100).toFixed(1)}%;background:${c}"></i></div><span class="when" style="min-width:104px;text-align:right">${fmtN(P[k] || 0)} · ${dec(((P[k] || 0) / tot * 100).toFixed(1))} %</span></div></td></tr>`).join('')}
+        </tbody></table>
+        <p style="color:var(--dim);font-size:13.5px;margin-top:14px">Varias parejas de afirmaciones pueden venir de las mismas dos noticias; en la pestaña Contradicciones se agrupan, por eso allí hay ${fmtN(T.contradicciones)}.</p></div>`;
+    }
+  } catch (e) { if (my !== seq) return; html = `<div style="padding-top:20px">${fail(e)}</div>`; }
+  m.innerHTML = html;
+  if (keepFocus) { const q = $('#q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+}
+
+async function openFicha(kind, id, push) {
+  if (push) history.pushState(null, '', `${BASE}/${kind}/${id}`);
+  const d = $('#drawer');
+  d.innerHTML = `<button class="x" id="x" aria-label="Cerrar ficha">${IC.x}</button><div class="count">Cargando…</div>`;
+  document.body.classList.add('open'); d.scrollTop = 0;
+  const closeBtn = `<button class="x" id="x" aria-label="Cerrar ficha">${IC.x}</button>`;
+  const dir = `<h3>Dirección de esta ficha</h3><div class="url"><code>${esc(location.origin)}${BASE}/${kind}/${esc(id)}</code><button class="btn" id="copy" data-url="${esc(location.origin)}${BASE}/${kind}/${esc(id)}">Copiar</button></div>`;
+  try {
+    if (kind === 'noticia') {
+      const n = await api('/noticia/' + encodeURIComponent(id));
+      document.title = n.titular + ' · Archivo del observatorio';
+      d.innerHTML = `${closeBtn}${src(n.medio, n.color)} <span class="when">· ${fmtD(n.publicada_en)}</span><h2>${esc(n.titular)}</h2>
+        ${n.descripcion ? `<p style="color:#3d3a33;margin:0 0 12px">${esc(n.descripcion)}</p>` : ''}
+        <a class="btn primary" href="${esc(safeUrl(n.enlace))}" target="_blank" rel="noopener noreferrer">${IC.ext}Leer en ${esc(n.medio)}</a>
+        ${n.contradicciones.length ? `<h3>Se contradice con (${n.contradicciones.length})</h3>${n.contradicciones.map(s => { const otro = s.a.id === n.id ? s.b : s.a, c = s.choques[0], lado = s.a.id === n.id ? c.b : c.a;
+          return `<a class="ctr" href="${BASE}/contradiccion/${esc(s.id)}" data-ficha style="margin-bottom:8px"><div style="padding:10px 12px">${src(otro.medio, otro.color)} <span class="when">${fmtD(otro.publicada_en)}</span><div class="claim" style="font-size:15px">${esc(lado.sujeto)} ${esc(lado.predicado)} <em>${esc(lado.objeto)}</em></div></div></a>`; }).join('')}` : ''}
+        <h3>Afirmaciones extraídas (${n.afirmaciones.length})</h3>${n.afirmaciones.length ? n.afirmaciones.map(c => `<div class="cl ${c.en_conflicto ? 'hit' : ''}"><b>${esc(c.sujeto)}</b> ${esc(c.predicado)} <b>${esc(c.objeto)}</b> <span class="chip">${esc(c.tema)}</span>${c.cita ? `<span class="cita">«${esc(c.cita)}»</span>` : ''}</div>`).join('') : `<p style="color:var(--dim);margin:0">Esta noticia todavía no se ha analizado.</p>`}${dir}`;
+    } else {
+      const s = await api('/contradiccion/' + encodeURIComponent(id));
+      document.title = 'Contradicción: ' + s.a.medio + ' / ' + s.b.medio + ' · Archivo del observatorio';
+      const pieza = (n, l) => `<h3>Versión ${l}</h3>${src(n.medio, n.color)} <span class="when">· ${fmtD(n.publicada_en)}</span>
+        <p style="margin:6px 0 0"><a href="${esc(safeUrl(n.enlace))}" target="_blank" rel="noopener noreferrer" style="font:600 17px/1.3 var(--serif)">${esc(n.titular)}</a> <a href="${BASE}/noticia/${esc(n.id)}" data-ficha style="color:var(--blue);font-size:13px;white-space:nowrap">ver ficha</a></p>`;
+      d.innerHTML = `${closeBtn}<span class="chip red">Contradicción · intensidad ${dec(s.intensidad)}</span> ${s.mismo_medio ? '<span class="chip amber">El mismo medio, dos versiones</span>' : ''} <span class="when">detectada ${fmtD(s.detectada)}</span>
+        ${pieza(s.a, 'A')}${pieza(s.b, 'B')}
+        <h3>${s.choques.length === 1 ? 'En qué chocan' : `En qué chocan (${s.choques.length} afirmaciones)`}</h3>
+        ${s.choques.map(c => `<div class="choque"><span class="lbl">${esc(s.a.medio)}</span><div class="claim" style="margin-top:0">${esc(c.a.sujeto)} ${esc(c.a.predicado)} <em>${esc(c.a.objeto)}</em></div>${c.a.cita ? `<span class="cita">«${esc(c.a.cita)}»</span>` : ''}
+          <span class="lbl" style="margin-top:10px">${esc(s.b.medio)}</span><div class="claim" style="margin-top:0">${esc(c.b.sujeto)} ${esc(c.b.predicado)} <em>${esc(c.b.objeto)}</em></div>${c.b.cita ? `<span class="cita">«${esc(c.b.cita)}»</span>` : ''}
+          <span class="lbl" style="margin-top:10px">Por qué se contradicen</span><div style="font-size:14px">${esc(c.razonamiento)}</div>
+          <div class="when" style="margin-top:6px;white-space:normal">Juzgado por ${esc(c.juez)}, sin revisión humana.</div></div>`).join('')}${dir}`;
+    }
+  } catch (e) { d.innerHTML = closeBtn + `<div style="padding-top:30px">${fail(e)}</div>`; }
+  const x = $('#x'); if (x) x.focus();
+}
+function closeFicha(silent) {
+  if (!document.body.classList.contains('open')) return;
+  document.body.classList.remove('open');
+  document.title = 'Archivo del observatorio de prensa';
+  if (!silent) history.pushState(null, '', urlFor(st));
+}
+
+document.addEventListener('click', e => {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+  const f = e.target.closest('a[data-ficha]');
+  if (f) { e.preventDefault(); const p = new URL(f.href).pathname.split('/'); return openFicha(p[2], p[3], true); }
+  const t = e.target.closest('a[data-tab]');
+  if (t) { e.preventDefault(); return go({tab:t.dataset.tab, q:'', medio:'', solo:'', tema:'', sesgo:''}); }
+  const md = e.target.closest('a[data-medio]');
+  if (md) { e.preventDefault(); return go({tab:'', medio:md.dataset.medio, q:'', solo:''}); }
+  if (e.target.closest('#more')) { st.lim = Math.min(200, st.lim + 40); return render(); }
+  if (e.target.closest('#x') || e.target.id === 'scrim') return closeFicha();
+  const cp = e.target.closest('#copy');
+  if (cp) { navigator.clipboard?.writeText(cp.dataset.url).then(() => { cp.textContent = 'Copiada'; }); return; }
+  const row = e.target.closest('tr[data-href]');
+  if (row && !e.target.closest('a')) { const a = row.querySelector('a'); if (a) a.click(); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFicha(); });
+let tmr;
+document.addEventListener('input', e => {
+  if (e.target.id !== 'q') return;
+  st.q = e.target.value; st.lim = 40; clearTimeout(tmr);
+  tmr = setTimeout(() => { history.replaceState(null, '', urlFor(st)); render(); }, 250);
+});
+document.addEventListener('change', e => {
+  const map = {fMedio:'medio', fSolo:'solo', fTema:'tema', fSesgo:'sesgo'};
+  if (map[e.target.id]) go({[map[e.target.id]]: e.target.value}, true);
+});
+function fromUrl() {
+  const {s, ficha} = readUrl(); st = s;
+  document.body.classList.remove('open');
+  render();
+  if (ficha) openFicha(ficha[0], ficha[1], false);
+}
+window.addEventListener('popstate', fromUrl);
+
+(async () => {
+  try {
+    [R, FU] = await Promise.all([api('/resumen'), api('/fuentes')]);
+    FU.forEach(f => F[f.slug] = f);
+    const T = R.totales;
+    $('#sub').textContent = `${fmtN(T.noticias)} noticias de ${T.medios} medios españoles desde el ${new Date(T.desde).toLocaleDateString('es-ES', {day:'numeric', month:'long', year:'numeric'})} · actualizado ${fmtD(T.actualizado)}`;
+    fromUrl();
+  } catch (e) { $('#main').innerHTML = `<div style="padding-top:20px">${fail(e)}</div>`; }
+})();
+</script>
+</body>
+</html>

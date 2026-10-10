@@ -121,3 +121,10 @@ que no se ven en tiempo real. Ver
     tocar) · rotación del rol `lyai`, a cargo de lyai-ski · `/opt/lyai/backups/prensa/` no sale del servidor.
   - Mi commit incluye también los pasos de `cron_ingest.sh` que estaban sin commitear (enrich_images,
     qa_wall_inspector): ya corrían en producción.
+
+- **2026-10-10 09:02 UTC** — Claude Code (sesión cd8df931) · despliegue de `/archivo`
+  - Reconstruyo y recreo `api` y `prensa` (EJECUTA de Ignacio). Añade `api/archivo.py`, `public/archivo/index.html`
+    y un `location /archivo` en `docker/nginx.conf`. El muro no cambia.
+  - **Desplegado y verificado 09:03 UTC** (Playwright contra producción: búsqueda, fichas, CSV, móvil, muro intacto).
+    Detalle en CLAUDE.md § «Archivo para periodistas». Imágenes anteriores: `:pre-archivo-20261010`.
+    Mi commit incluye lo que había sin commitear en `api/main.py` y `docker/nginx.conf` (ya estaba en producción).
