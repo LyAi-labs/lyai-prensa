@@ -1,0 +1,74 @@
+# Deploy de lyai-prensa detrás de Traefik en 178.63.165.87.
+# DNS: prensa.lyai.es → 178.63.165.87 (A record, TTL 300).
+#
+# Valores confirmados contra /home/lyai/traefik/config/traefik.yml y contra
+# los servicios que ya funcionan (dnb-api, agents-hub):
+#   - red externa:  traefik_traefik
+#   - entrypoints:  web (:80) y websecure
+#   - certresolver: letsencrypt
+#
+# Las labels replican el patrón de esos servicios: un único router en
+# websecure con tls.certresolver. Traefik atiende el challenge ACME por su
+# cuenta en el entrypoint web, no hace falta un router HTTP propio.
+#
+# Base de datos: Postgres DEDICADO `lyai_prensa_postgres`, definido en
+# docker-compose.db.yml (proyecto compose aparte: lo de aquí no lo toca). Hasta
+# el 2026-10-10 `api` colgaba de `lyai-ski_ski_internal`, la red del Postgres de
+# lyai-ski; ya no comparte red ni credenciales con ese proyecto.
+#
+# Uso (el binario aquí es `docker-compose`, no el plugin `docker compose`):
+#   git pull
+#   docker-compose up -d --build
+
+services:
+  prensa:
+    build: .
+    image: lyai-prensa:latest
+    container_name: lyai_prensa
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prensa.rule=Host(`prensa.lyai.es`)"
+      - "traefik.http.routers.prensa.entrypoints=websecure"
+      - "traefik.http.routers.prensa.tls.certresolver=letsencrypt"
+      - "traefik.http.services.prensa.loadbalancer.server.port=80"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: lyai-prensa-api:latest
+    container_name: lyai_prensa_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # La DATABASE_URL de .env es la del HOST (rol `prensa`, lectura/escritura,
+      # 127.0.0.1:5436) y es la que usa el pipeline. Aquí se sustituye por la del
+      # contenedor: rol `prensa_api`, SOLO LECTURA, por la red Docker de la BD.
+      DATABASE_URL: "postgresql://prensa_api:${PRENSA_API_DB_PASSWORD:?falta PRENSA_API_DB_PASSWORD en .env}@lyai_prensa_postgres:5432/prensa"
+    networks:
+      - traefik
+      - prensa_db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prensa-api.rule=Host(`prensa.lyai.es`) && PathPrefix(`/api`)"
+      # Prioridad explícita para que /api/* no caiga en el router de
+      # `prensa` (Host solo, sin PathPrefix) — Traefik ya prioriza por
+      # especificidad de la regla, pero se fija a mano para no depender
+      # de ese comportamiento implícito.
+      - "traefik.http.routers.prensa-api.priority=10"
+      - "traefik.http.routers.prensa-api.entrypoints=websecure"
+      - "traefik.http.routers.prensa-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.prensa-api.loadbalancer.server.port=8000"
+
+networks:
+  traefik:
+    external: true
+    name: traefik_traefik
+  # La crea docker-compose.db.yml; solo viven en ella el Postgres de prensa y `api`.
+  prensa_db:
+    external: true
+    name: lyai_prensa_db_net

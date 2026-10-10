@@ -1,0 +1,244 @@
+/* ==========================================================================
+   HEADER DOCK (Cabecera y paneles flotantes de control editorial)
+   ========================================================================== */
+
+.header-dock-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 60;
+  pointer-events: auto;
+  user-select: none;
+}
+
+/* ── POPOVER PANEL: BÚSQUEDA Y FILTROS ── */
+.dock-popover-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: rgba(13, 14, 18, 0.96);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.8),
+    0 0 1px 1px rgba(255, 255, 255, 0.08);
+  padding: 16px;
+  z-index: 100;
+  animation: dockDropIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (min-width: 768px) {
+  .dock-popover-panel {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes dockDropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (min-width: 768px) {
+  @keyframes dockDropIn {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-6px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+  }
+}
+
+.dock-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.dock-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.dock-badge-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #0b0f19;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dock-panel-reset {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.dock-panel-reset:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dock-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dock-panel-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  position: relative;
+}
+
+.dock-row-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Buscador de texto */
+.dock-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  width: 100%;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.dock-search-box:focus-within {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.dock-search-icon {
+  color: rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+.dock-search-box input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.dock-search-box input::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.dock-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.dock-search-clear:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* ── POPOVER CALENDARIO ── */
+.dock-popover-calendar {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  z-index: 100;
+  animation: dockDropIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (min-width: 768px) {
+  .dock-popover-calendar {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+/* ── TOAST TEMA CLARO · PRÓXIMAMENTE ── */
+.dock-theme-toast {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(18, 19, 24, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.7);
+  z-index: 90;
+  pointer-events: none;
+  animation: dockDropIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dock-toast-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+}
