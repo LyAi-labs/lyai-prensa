@@ -1,5 +1,9 @@
 # Política de backups y HA — `lyai_db`
 
+> ⚠️ **Documento histórico (2026-10-10).** Describe un diseño para la base compartida `lyai_db`
+> que nunca se desplegó así. Prensa ya no vive en `lyai_db`: tiene su propio Postgres y su propio
+> backup. Lo vigente está en `CLAUDE.md` § «Base de datos» y en `ops/postgres-backup.sh`.
+
 Operación canónica de la base de datos compartida `lyai_db`
 (contenedor Docker `lyai_postgres`) que aloja los esquemas
 `lyai`, `puertas`, `autonoma` y `prensa`.

@@ -61,3 +61,63 @@ que no se ven en tiempo real. Ver
       - Añadido selector de vista en popout modal (`⚖️ Comparativa 03` vs `📰 Tarjetas 3D`).
   - **Verificado**: Build de producción `npm run build` en 5.09s (0 errores TS/Vite). Commit `ed0e4dd`.
 
+
+- **2026-10-10** — Claude Code
+  - **Qué se hizo** (sesión con Ignacio, varios temas):
+    1. Fix táctil Android: `moveDist < 6` (umbral tap-vs-drag) era igual para ratón y dedo en `WallGL.tsx` `onUp` — el jitter normal de un toque lo superaba y todo tap se clasificaba como arrastre (solo funcionaba deslizar). Ahora `tapSlop = pointerType==='touch' ? 14 : 6`.
+    2. Añadido `RotateHint.tsx`: banner "gira el móvil" en `pointer: coarse` + `orientation: portrait`, montado en `App.tsx`.
+    3. PWA Android: confirmado que contradicciones entre noticias del MISMO medio son intencionadas (`docs/contradiccion-criterios.md` caso límite "mismo medio, distinto día"). El problema real era que la guía de fallback (`InstallPrompt.tsx`, cuando `beforeinstallprompt` aún no disparó) mostraba instrucciones de Chrome ESCRITORIO ("icono en la barra de direcciones") en Android — añadida rama `isAndroid` con pasos reales (⋮ → Instalar aplicación). Además, quitado `e.preventDefault()` en `pwa.ts` sobre `beforeinstallprompt` para que Chrome muestre su propio diálogo nativo automáticamente (antes solo salía al pulsar nuestro botón propio).
+    4. Contradicciones N-way (3+ noticias/medios implicados en el mismo dato): confirmado que el modelo de datos ya soporta `item.contradicciones` con varias entradas, pero TODO el frontend cogía siempre `contradicciones[0]` (sin orden garantizado en SQL). En `ContradictionComparison.tsx`, modo "Tarjetas 3D": cuando `item.contradicciones.length > 1`, nuevo layout con `DragBento`/`BentoTile` (sincronizado de `lyai-shared` a `src/shared/components/drag-bento/`) mostrando TODAS las tarjetas implicadas en una fila arrastrable, cada una con su claim resaltado + badge de intensidad individual. El modo "Comparativa 03" sigue siendo pairwise (usa el primer par).
+  - **Pendiente de verificar**: nada probado en dispositivo Android real ni en producción — cambios solo compilados (`tsc --noEmit` limpio). Sin commit todavía.
+
+- **2026-10-10 (cierre de sesión)** — Claude Code
+  - **Desplegado y verificado** (Playwright, no a ciegas): fix tap Android, banner girar móvil, PWA
+    prompt nativo + guía Android correcta, rejilla WebGL dispersa centrada, buscador ignora fecha
+    con texto, panel N-way de contradicciones con `DragBento`/`BentoTile` (sincronizado de
+    lyai-shared) mostrando TODAS las noticias implicadas en vez de solo la primera.
+  - **Seguridad**: primer uso real de `/security-audit` a medida (protocolo `audit_tool_request`).
+    Hallazgo Alto confirmado: SSRF en `/api/image-proxy` (`api/main.py:295`, sin allowlist, red
+    Docker compartida con Postgres de lyai-ski) — propuesto al canal
+    (`SEC-PROPOSED-lyai-prensa-image-proxy-ssrf`), **sin arreglar todavía**. Comando guardado en
+    `.claude/commands/security-audit.md`.
+  - **Pendiente, sin ejecutar**: migración del esquema `prensa` a un Postgres dedicado propio
+    (`lyai_prensa_postgres`, imagen con pgvector) — aprobada por Ignacio, prompt de traspaso
+    preparado para sesión nueva. 4 iniciativas grandes en curso (archivo/búsqueda pública,
+    de-branding/anonimato, SEO, seguridad) — ver memoria del proyecto
+    `project_pendientes_cierre_2026-10-10.md` para el detalle completo antes de tocar nada de esto.
+
+- **2026-10-10 07:40 UTC — EN CURSO** — Claude Code (sesión cd8df931, migración Postgres)
+  - **Qué estoy haciendo**: sacar el esquema `prensa` de `lyai_postgres` (el Postgres de lyai-ski) a un
+    contenedor dedicado `lyai_prensa_postgres`. Ahora mismo **solo preparación**: producción intacta, el
+    cron sigue escribiendo en la BD de siempre.
+  - **Por favor, hasta que esta entrada diga CERRADO**:
+    - NO recrear el contenedor `api` (`docker-compose up -d --build`, `--force-recreate`…). Si necesitas
+      redesplegar el frontend usa `docker-compose up -d --no-deps prensa`.
+    - NO hacer más `docker cp` al contenedor `api`: está parcheado en caliente (api/*.py + Pillow instalado
+      a mano) y la imagen `lyai-prensa-api:latest` NO contiene ese código — cualquier recreate lo revertía.
+      Lo dejo resuelto en esta migración (imagen reconstruida desde el árbol).
+    - NO editar `.env`, `docker-compose.yml`, `pipeline/db.py` ni `pipeline/cron_ingest.sh` sin mirar aquí.
+  - Avisaré en este mismo fichero de la ventana de corte (cron pausado unos minutos) y del cierre.
+
+- **2026-10-10 08:25 UTC — VENTANA DE CORTE ABIERTA** — Claude Code (sesión cd8df931)
+  - EJECUTA de Ignacio tras revisión de la sesión INFRA de lyai-ski (aprobado con condiciones). Cron de
+    ingesta PAUSADO. **No lanzar pipeline a mano ni recrear `api` hasta la entrada de cierre.**
+
+- **2026-10-10 08:35 UTC — CERRADO** — Claude Code (sesión cd8df931) · migración a Postgres dedicado
+  - **Hecho** (corte 08:24 UTC, EJECUTA de Ignacio tras revisión de la sesión INFRA de lyai-ski): la BD de
+    prensa es ahora el contenedor `lyai_prensa_postgres` (`docker-compose.db.yml`, base `prensa`,
+    `127.0.0.1:5436`). `api` ya no está en `lyai-ski_ski_internal` y conecta con el rol de solo lectura
+    `prensa_api`. Cron reactivado y escribiendo en la BD nueva. Detalle: CLAUDE.md § «Base de datos» y
+    wiki `decisions/decision-2026-10-10-prensa-postgres-dedicado.md`.
+  - **Lo que cambia para ti**:
+    - `.env` trae la `DATABASE_URL` del HOST: `python3 -m pipeline.xxx` funciona sin `sed`. `pipeline/db.py`
+      rechaza URLs que apunten a `lyai_postgres`/`lyai_db`. Quité de `db.py` el fallback
+      `lyai_postgres -> 127.0.0.1` que había sin commitear (ya no hace falta).
+    - La imagen de `api` se reconstruyó desde el árbol y ya contiene lo que estaba parcheado con
+      `docker cp` (api/*.py, Pillow). **No más `docker cp`**: `docker-compose build api`.
+      `constraints-api.txt` fija sus dependencias; `Dockerfile.api` lo usa.
+    - Backup propio: `ops/postgres-backup.sh` (cada 6 h) y `ops/postgres-verify-backup.sh` (domingos).
+  - **Abierto**: el esquema `prensa` sigue congelado en `lyai_postgres` (su DROP espera a Ignacio; no
+    tocar) · rotación del rol `lyai`, a cargo de lyai-ski · `/opt/lyai/backups/prensa/` no sale del servidor.
+  - Mi commit incluye también los pasos de `cron_ingest.sh` que estaban sin commitear (enrich_images,
+    qa_wall_inspector): ya corrían en producción.

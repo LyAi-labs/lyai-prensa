@@ -11,13 +11,14 @@
 # websecure con tls.certresolver. Traefik atiende el challenge ACME por su
 # cuenta en el entrypoint web, no hace falta un router HTTP propio.
 #
-# Confirmado en el servidor 2026-09-04: `lyai_postgres` está en la red
-# `lyai-ski_ski_internal` (docker inspect lyai_postgres --format
-# '{{json .NetworkSettings.Networks}}').
+# Base de datos: Postgres DEDICADO `lyai_prensa_postgres`, definido en
+# docker-compose.db.yml (proyecto compose aparte: lo de aquí no lo toca). Hasta
+# el 2026-10-10 `api` colgaba de `lyai-ski_ski_internal`, la red del Postgres de
+# lyai-ski; ya no comparte red ni credenciales con ese proyecto.
 #
-# Uso:
+# Uso (el binario aquí es `docker-compose`, no el plugin `docker compose`):
 #   git pull
-#   docker compose up -d --build
+#   docker-compose up -d --build
 
 services:
   prensa:
@@ -43,9 +44,14 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # La DATABASE_URL de .env es la del HOST (rol `prensa`, lectura/escritura,
+      # 127.0.0.1:5436) y es la que usa el pipeline. Aquí se sustituye por la del
+      # contenedor: rol `prensa_api`, SOLO LECTURA, por la red Docker de la BD.
+      DATABASE_URL: "postgresql://prensa_api:${PRENSA_API_DB_PASSWORD:?falta PRENSA_API_DB_PASSWORD en .env}@lyai_prensa_postgres:5432/prensa"
     networks:
       - traefik
-      - lyai_postgres_net
+      - prensa_db
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.prensa-api.rule=Host(`prensa.lyai.es`) && PathPrefix(`/api`)"
@@ -62,6 +68,7 @@ networks:
   traefik:
     external: true
     name: traefik_traefik
-  lyai_postgres_net:
+  # La crea docker-compose.db.yml; solo viven en ella el Postgres de prensa y `api`.
+  prensa_db:
     external: true
-    name: lyai-ski_ski_internal
+    name: lyai_prensa_db_net

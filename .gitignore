@@ -5,6 +5,9 @@ dist-ssr
 *.local
 .env
 .env.local
+# .env.db (superusuario del Postgres dedicado), copias .env.bak-* y cualquier otra variante con secretos
+.env.*
+!.env.example
 .vscode/*
 !.vscode/extensions.json
 .idea

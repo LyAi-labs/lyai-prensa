@@ -3,8 +3,8 @@
 FROM python:3.12-slim
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt constraints-api.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -c constraints-api.txt
 
 COPY pipeline ./pipeline
 COPY api ./api

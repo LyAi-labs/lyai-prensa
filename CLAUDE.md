@@ -49,8 +49,9 @@ etiquetada como `lyai-prensa:pre-parallax-2026-10-02`. Retirar: `docker-compose 
 -f docker-compose.parallax.yml down` (sin `-v`) + quitar `prensa-v2-*` de `routes.yml`
 (copia previa: `routes.yml.bak-pre-prensa-v2-20261002-1837`).
 
-`docker-compose.yml` define dos servicios, ambos en la red externa `traefik_traefik` más
-`lyai_postgres_net` (alias de `lyai-ski_ski_internal`, compartida con la BD de lyai-ski):
+`docker-compose.yml` define dos servicios en la red externa `traefik_traefik`; `api` cuelga además
+de `lyai_prensa_db_net`, la red del Postgres propio (ver «Base de datos» abajo). Desde el 2026-10-10
+ningún contenedor de prensa está en `lyai-ski_ski_internal`:
 
 | Servicio | Contenedor | Dominio |
 |---|---|---|
@@ -58,7 +59,34 @@ etiquetada como `lyai-prensa:pre-parallax-2026-10-02`. Retirar: `docker-compose 
 | `api` (FastAPI) | `lyai_prensa_api` | `Host(\`prensa.lyai.es\`) && PathPrefix(\`/api\`)`, priority=10 |
 
 <!-- verify: docker inspect lyai_prensa --format '{{.Name}}' | grep -q lyai_prensa -->
-<!-- verify: docker inspect lyai_postgres --format '{{.Name}}' | grep -q lyai_postgres -->
+<!-- verify: docker inspect lyai_prensa_postgres --format '{{.State.Health.Status}}' | grep -q healthy -->
+<!-- verify: ! docker inspect lyai_prensa_api --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' | grep -q ski_internal -->
+
+### 🗄️ Base de datos — Postgres DEDICADO (desde 2026-10-10)
+
+El esquema `prensa` ya **no** vive en `lyai_postgres` (lyai-ski). Decisión y procedimiento:
+`/opt/lyai/wiki/pages/decisions/decision-2026-10-10-prensa-postgres-dedicado.md`.
+
+- **Contenedor** `lyai_prensa_postgres` (PostgreSQL 16.13 + pgvector 0.8.2, imagen fijada por digest),
+  definido en **`docker-compose.db.yml`** — proyecto compose aparte (`lyai-prensa-db`): un
+  `up --build`/`down` de la app no lo toca. Volumen **externo** `lyai_prensa_pgdata` (ni `down -v`
+  lo borra), red `lyai_prensa_db_net`, puerto solo en `127.0.0.1:5436`. Base `prensa`.
+- **Tres roles** (los crea `ops/prensa-db-bootstrap.sh`, idempotente):
+  `postgres` (superusuario, solo por `docker exec`) · `prensa` (dueño del esquema, lectura/escritura:
+  el pipeline) · `prensa_api` (**solo lectura**: el contenedor `api`).
+- **`.env` trae la `DATABASE_URL` del HOST** (rol `prensa`, `127.0.0.1:5436`): cron y pipeline a mano la
+  usan tal cual, sin `sed`. El contenedor `api` recibe otra, que monta `docker-compose.yml` con
+  `PRENSA_API_DB_PASSWORD`. El superusuario va en `.env.db`, que `api` no carga.
+- `pipeline/db.py` **rechaza** una URL que apunte a `lyai_postgres`/`lyai_db` (evita escribir en el
+  esquema viejo por una variable exportada antigua).
+- psql a mano: `docker exec -it lyai_prensa_postgres psql -U postgres -d prensa`.
+- ⚠️ El esquema `prensa` **sigue existiendo, congelado, en `lyai_postgres`**. Su `DROP` espera días de
+  estabilidad y confirmación explícita de Ignacio. No lo borres ni lo uses.
+- ⚠️ **La imagen de `api` sale siempre del árbol** (`docker-compose build api`), nunca de `docker cp`:
+  el 2026-10-10 producción llevaba 3 días con código y Pillow metidos a mano en el contenedor y una
+  imagen `latest` que no los tenía — cualquier recreate lo habría revertido. `constraints-api.txt`
+  fija las versiones exactas de sus dependencias.
+  <!-- verify: test -f /opt/lyai/app/lyai-prensa/docker-compose.db.yml && test -x /opt/lyai/app/lyai-prensa/ops/prensa-db-bootstrap.sh -->
 
 ⚠️ **En este server el binario es `docker-compose` (v5.1.3), NO el plugin `docker compose`**
 (probado 2026-09-29: `docker compose up` falla con "unknown command"). Usa siempre el guion.
@@ -164,21 +192,15 @@ gastar hasta que genere ingresos:
   `generate_content_free_tier_requests, limit: 20`). Los tres scripts pacean con
   `SLEEP_ENTRE_LLAMADAS` (~3.5s) entre llamadas — no lo quites, un lote de más de un puñado
   de noticias falla en cadena sin él.
-- **Gotcha de conexión a BD desde el host**: `.env` trae `DATABASE_URL` con el hostname
-  Docker `lyai_postgres` (solo resuelve dentro de la red del contenedor). Para correr el
-  pipeline directamente en el host (`python -m pipeline.xxx`, como documenta AGY.md), hay que
-  sustituir el host por `localhost` (Postgres publica `127.0.0.1:5432`) **sin tocar el
-  `.env`** — el contenedor `api` sí necesita el hostname tal cual:
-  ```bash
-  DATABASE_URL=$(grep '^DATABASE_URL=' .env | cut -d= -f2- | sed 's/lyai_postgres/localhost/') \
-    python3 -m pipeline.extract_claims --limit 20
-  ```
-- **Backup roto**: `ops/postgres-backup.sh` falla con `Permission denied` al crear
-  `/var/backups/lyai_db` (directorio `root:root 755`, el usuario `lyai` no puede escribir
-  ahí). No arreglado todavía — no des por hecho que el backup corrió solo porque el script no
-  dio error de sintaxis.
-- **Cron**: no hay ninguno todavía para el pipeline (extracción/embeddings/juez corren solo a
-  mano). Pendiente de decidir cadencia una vez validada una corrida grande.
+- **Pipeline desde el host**: `python3 -m pipeline.extract_claims --limit 20` sin más — `.env` ya
+  trae la URL del host (ver «Base de datos»). El viejo `sed 's/lyai_postgres/localhost/'` sobra.
+- **Backup** (arreglado 2026-10-10): `ops/postgres-backup.sh` vuelca la base entera a
+  `/opt/lyai/backups/prensa/` (SHA-256, 14 días) y `ops/postgres-verify-backup.sh` la restaura en un
+  Postgres efímero para probar que sirve. En el crontab de `lyai`: cada 6 h (a y 20) y domingos 05:20;
+  log en `/var/log/lyai/prensa-backup.log`; avisan por Telegram si fallan.
+  ⚠️ Esa carpeta **no sale del servidor**: el espejo off-site solo recoge `/opt/lyai/backups/auto`.
+- **Cron**: `*/30 * * * * pipeline/cron_ingest.sh` (crontab de `lyai`) — ingesta, imágenes, claims,
+  embeddings, juez y QA. Una corrida dura 13-24 min y no lleva lock.
 
 ---
 

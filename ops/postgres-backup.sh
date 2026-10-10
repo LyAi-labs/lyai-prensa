@@ -1,72 +1,89 @@
 #!/usr/bin/env bash
 #
-# Backup de lyai_db. Pensado para ejecutarse desde cron.
+# Backup del Postgres dedicado de prensa (contenedor `lyai_prensa_postgres`,
+# base `prensa`). Pensado para el cron del usuario lyai (ver ops/crontab.example).
+# No lleva secretos: entra por el socket local del contenedor (`docker exec`).
 #
-# Modos:
-#   ./postgres-backup.sh full          -> pg_dumpall completo (.sql.gz)
-#   ./postgres-backup.sh schema NAME   -> pg_dump -Fc del esquema (.dump)
+#   ops/postgres-backup.sh
 #
-# Variables (en /etc/lyai/backup.env, modo 0600 owner root):
-#   CONTAINER       (default: lyai_postgres)
-#   PG_USER         (default: postgres)
-#   PG_DB           (default: lyai_db)
-#   BACKUP_DIR      (default: /var/backups/lyai_db)
-#   AGE_RECIPIENT   (clave pública age para cifrar off-site; opcional)
-#   S3_BUCKET       (bucket S3-compatible, p.ej. s3://lyai-backups; opcional)
-#   AWS_*           (credenciales para aws-cli; opcional)
+# Pasos — se para en el primero que falle y avisa por Telegram:
+#   1. pg_dump -Fc de la base entera a un temporal DENTRO del contenedor (nunca
+#      por redirección al host: un pg_dump que muere a medias dejaría un fichero
+#      truncado con pinta de bueno)
+#   2. tamaño mínimo
+#   3. `pg_restore --list`: el fichero se lee y trae las tablas clave
+#   4. copia al host + SHA-256 en SHA256SUMS
+#   5. rotación (RETENTION_DAYS)
 #
-# Si AGE_RECIPIENT y S3_BUCKET están definidos, además del dump local
-# sube una copia cifrada con age al bucket. Si no, solo dump local.
+# "Tengo un dump" no es "puedo restaurar": eso lo prueba
+# ops/postgres-verify-backup.sh, que restaura de verdad.
+#
+# El dump trae esquema, datos y extensiones, pero NO los roles (son del clúster).
+# Restaurar en un contenedor nuevo: docker-compose.db.yml + ops/prensa-db-bootstrap.sh
+# y luego `pg_restore -U postgres -d prensa --no-owner --role=prensa <dump>`.
+#
+# Variables (opcionales, por entorno):
+#   PRENSA_PG_CONTAINER  (lyai_prensa_postgres)
+#   PRENSA_PG_DB         (prensa)
+#   PRENSA_BACKUP_DIR    (/opt/lyai/backups/prensa)
+#   RETENTION_DAYS       (14)
+#   LYAI_NOTIFY          (/opt/lyai/bin/lyai-notify.sh; vacío = no avisar, para pruebas)
 
 set -euo pipefail
 
-ENV_FILE="${LYAI_BACKUP_ENV:-/etc/lyai/backup.env}"
-[ -f "$ENV_FILE" ] && . "$ENV_FILE"
+CONTAINER="${PRENSA_PG_CONTAINER:-lyai_prensa_postgres}"
+PG_DB="${PRENSA_PG_DB:-prensa}"
+BACKUP_DIR="${PRENSA_BACKUP_DIR:-/opt/lyai/backups/prensa}"
+RETENTION_DAYS="${RETENTION_DAYS:-14}"
+NOTIFY="${LYAI_NOTIFY-/opt/lyai/bin/lyai-notify.sh}"
+MIN_SIZE_BYTES=1048576
+TABLAS_CLAVE=(noticias fuentes claims)
 
-CONTAINER="${CONTAINER:-lyai_postgres}"
-PG_USER="${PG_USER:-postgres}"
-PG_DB="${PG_DB:-lyai_db}"
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/lyai_db}"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+NAME="prensa_db_${TS}.dump"
+DEST="$BACKUP_DIR/$NAME"
+TMP_IN_CONTAINER="/tmp/${NAME}.partial"
 
-mkdir -p "$BACKUP_DIR"
+log() { echo "[$(date -u +%FT%TZ)] $*"; }
 
-mode="${1:-}"
-case "$mode" in
-  full)
-    name="diario-$(date -u +%Y-%m-%d)"
-    dest="$BACKUP_DIR/$name.sql.gz"
-    docker exec ${PG_PASSWORD:+-e PGPASSWORD="$PG_PASSWORD"} "$CONTAINER" pg_dumpall -U "$PG_USER" \
-      | gzip -9 > "$dest"
-    ;;
-  schema)
-    schema="${2:-}"
-    if [ -z "$schema" ]; then
-      echo "Falta nombre de esquema" >&2
-      exit 2
-    fi
-    name="${schema}-$(date -u +%Y-%m-%dT%H)"
-    dest="$BACKUP_DIR/$name.dump"
-    docker exec ${PG_PASSWORD:+-e PGPASSWORD="$PG_PASSWORD"} "$CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" \
-      --schema="$schema" -Fc > "$dest"
-    ;;
-  *)
-    echo "Uso: $0 {full|schema NAME}" >&2
-    exit 2
-    ;;
-esac
-
-# Off-site cifrado (best-effort: si falla, el dump local sigue intacto).
-if [ -n "${AGE_RECIPIENT:-}" ] && [ -n "${S3_BUCKET:-}" ]; then
-  encrypted="${dest}.age"
-  if age -r "$AGE_RECIPIENT" -o "$encrypted" "$dest" \
-     && aws s3 cp "$encrypted" "${S3_BUCKET}/$(basename "$encrypted")" >/dev/null; then
-    rm -f "$encrypted"
-  else
-    echo "[WARN] Off-site falló para $dest" >&2
-    rm -f "$encrypted"
+fail() {
+  log "FAIL: $*" >&2
+  if [ -n "$NOTIFY" ] && [ -x "$NOTIFY" ]; then
+    "$NOTIFY" "🔴 Backup de prensa FALLÓ: $*" --tag PRENSA-BACKUP >/dev/null 2>&1 || log "aviso por Telegram NO entregado" >&2
   fi
-fi
+  exit 1
+}
 
-# Tamaño legible para el log
-size=$(du -h "$dest" | cut -f1)
-echo "[OK] $dest ($size)"
+cleanup() { docker exec "$CONTAINER" rm -f "$TMP_IN_CONTAINER" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+
+docker ps --format '{{.Names}}' | grep -qx "$CONTAINER" || fail "el contenedor $CONTAINER no está corriendo"
+mkdir -p "$BACKUP_DIR" && chmod 750 "$BACKUP_DIR" || fail "no puedo crear $BACKUP_DIR"
+
+# 1. Dump dentro del contenedor
+docker exec "$CONTAINER" pg_dump -U postgres -d "$PG_DB" -Fc -f "$TMP_IN_CONTAINER" 2>/tmp/prensa-backup-err.$$ \
+  || fail "pg_dump: $(head -n 3 /tmp/prensa-backup-err.$$ 2>/dev/null | tr '\n' ' ')"
+rm -f /tmp/prensa-backup-err.$$
+
+# 2. Tamaño
+SIZE="$(docker exec "$CONTAINER" stat -c%s "$TMP_IN_CONTAINER")"
+[ "$SIZE" -ge "$MIN_SIZE_BYTES" ] || fail "dump demasiado pequeño: ${SIZE} bytes"
+
+# 3. Se lee y trae las tablas clave
+LISTA="$(docker exec "$CONTAINER" pg_restore --list "$TMP_IN_CONTAINER" 2>/dev/null)" || fail "pg_restore --list no puede leer el dump"
+for t in "${TABLAS_CLAVE[@]}"; do
+  grep -q "TABLE DATA prensa $t " <<<"$LISTA" || fail "el dump no trae datos de prensa.$t"
+done
+
+# 4. Al host + SHA-256
+docker cp -q "$CONTAINER:$TMP_IN_CONTAINER" "$DEST.partial" || fail "docker cp del dump al host"
+[ "$(stat -c%s "$DEST.partial")" = "$SIZE" ] || fail "el dump copiado no mide lo mismo que el original"
+mv "$DEST.partial" "$DEST"
+chmod 640 "$DEST"
+( cd "$BACKUP_DIR" && sha256sum "$NAME" >> SHA256SUMS )
+
+# 5. Rotación: fuera los dumps viejos y sus líneas en SHA256SUMS
+find "$BACKUP_DIR" -maxdepth 1 -name 'prensa_db_*.dump' -mtime +"$RETENTION_DAYS" -delete
+( cd "$BACKUP_DIR" && while read -r sum file; do [ -f "$file" ] && echo "$sum  $file"; done < SHA256SUMS > SHA256SUMS.tmp && mv SHA256SUMS.tmp SHA256SUMS )
+
+log "OK: $DEST ($(numfmt --to=iec "$SIZE"), $(grep -c 'TABLE DATA prensa ' <<<"$LISTA") tablas) · quedan $(find "$BACKUP_DIR" -maxdepth 1 -name 'prensa_db_*.dump' | wc -l) copias"

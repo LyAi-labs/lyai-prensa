@@ -86,13 +86,16 @@ con middleware `prensa-v2-strip`). Configuración equivalente en las labels (inf
 | Servicio | Dominio/regla | Red | Puerto interno |
 |---|---|---|---|
 | `prensa` (frontend) | `Host(\`prensa.lyai.es\`)` | `traefik_traefik` | 80 |
-| `api` (backend) | `Host(\`prensa.lyai.es\`) && PathPrefix(\`/api\`)`, priority=10 | `traefik_traefik` + `lyai_postgres_net` | 8000 |
+| `api` (backend) | `Host(\`prensa.lyai.es\`) && PathPrefix(\`/api\`)`, priority=10 | `traefik_traefik` + `lyai_prensa_db_net` | 8000 |
 
-- `lyai_postgres_net` es un alias externo de la red real `lyai-ski_ski_internal` — la BD de
-  prensa comparte red con Postgres de lyai-ski (confirmado con `docker inspect lyai_postgres`
-  el 2026-09-04, commiteado el 2026-09-17 en `9c17be8`; decisión de fondo en la wiki,
-  `decisions/decision-2026-09-04-separar-lyai-postgres-de-otros-proyectos.md`). Ya NO es un
-  placeholder — no lo vuelvas a "confirmar", ya está en `docker-compose.yml`.
+- **BD propia desde el 2026-10-10**: contenedor `lyai_prensa_postgres` (`docker-compose.db.yml`,
+  proyecto compose aparte), red `lyai_prensa_db_net`, base `prensa`, `127.0.0.1:5436` en el host.
+  Prensa ya NO comparte red ni credenciales con el Postgres de lyai-ski. `.env` trae la
+  `DATABASE_URL` del HOST (rol `prensa`); el contenedor `api` usa el rol de solo lectura
+  `prensa_api`, que monta `docker-compose.yml`. Detalle completo en CLAUDE.md § «Base de datos» y en
+  la wiki, `decisions/decision-2026-10-10-prensa-postgres-dedicado.md`. El esquema `prensa` viejo
+  sigue congelado en `lyai_postgres`: no lo uses ni lo borres.
+- **Nunca `docker cp` al contenedor `api`**: la imagen sale del árbol (`docker-compose build api`).
 - `certresolver: letsencrypt`, entrypoint `websecure`; el challenge ACME lo atiende Traefik
   solo en el entrypoint `web`, no hace falta router HTTP propio.
 - **Cambiar el routing de prensa = editar `dynamic/routes.yml`** (recarga en caliente). Copia de
@@ -203,10 +206,8 @@ Antes el muro pintaba `sampleNews.ts` (mock) con contradicciones sin pareja real
 
 1. `git status` primero, siempre, antes de tocar la rama.
 2. `git fetch origin && git checkout claude/resume-session-xLdtE && git pull` si hace falta.
-3. Backup antes de tocar la BD: `./ops/postgres-backup.sh schema prensa` — **roto ahora
-   mismo**: `mkdir /var/backups/lyai_db` da Permission denied (el directorio es root:root
-   755). O se arregla el permiso/BACKUP_DIR, o se pide a Ignacio, antes de fiarse de este
-   paso.
+3. Backup antes de tocar la BD: `./ops/postgres-backup.sh` (funciona desde el 2026-10-10: vuelca
+   la base `prensa` del contenedor dedicado a `/opt/lyai/backups/prensa/`).
 4. ~~Confirmar red Docker de `lyai_postgres`~~ — **ya hecho y commiteado** (`9c17be8`,
    2026-09-17): es `lyai-ski_ski_internal`. No lo repitas.
 5. ~~Añadir `VOYAGE_API_KEY`~~ — **ya no aplica** (2026-09-29): embeddings son locales
@@ -221,14 +222,10 @@ Antes el muro pintaba `sampleNews.ts` (mock) con contradicciones sin pareja real
    tras el build, forzar `docker-compose build --no-cache prensa && docker-compose up -d
    --force-recreate prensa`.
 8. Primera corrida pequeña — **ya no requiere autorización de coste** (todo gratis desde el
-   2026-09-29): `DATABASE_URL=$(grep '^DATABASE_URL=' .env | cut -d= -f2- | sed
-   's/lyai_postgres/localhost/') python3 -m pipeline.ingest && ... extract_claims --limit 20
-   && ... embed_claims --limit 20 && ... judge_contradictions --limit 20`. Nota el prefijo
-   `DATABASE_URL=...localhost...`: el `.env` trae el hostname Docker (`lyai_postgres`), que
-   solo resuelve dentro de la red del contenedor — para correr el pipeline en el host hay que
-   sustituirlo por `localhost` (Postgres publica `127.0.0.1:5432`), sin tocar el `.env` (el
-   contenedor `api` sí necesita el hostname tal cual).
-9. No hay cron todavía para el pipeline — pendiente de cerrar una vez validado lo anterior.
+   2026-09-29): `python3 -m pipeline.ingest && python3 -m pipeline.extract_claims --limit 20
+   && ... embed_claims --limit 20 && ... judge_contradictions --limit 20`. Sin prefijo
+   `DATABASE_URL=...`: desde el 2026-10-10 `.env` ya trae la URL del host.
+9. Cron: `*/30 * * * * pipeline/cron_ingest.sh` en el crontab de `lyai`.
 
 ### Restricciones activas
 
@@ -322,7 +319,7 @@ variables de entorno no-secretas, dependencias nuevas.
 
 ❌ Requiere autorización explícita de Ignacio (palabra literal **EJECUTA** si toca producción/
 routing compartido): gasto ≥$0.10, `docker compose down -v`, cambios a `/home/lyai/traefik/`
-file provider, tocar la red `lyai_postgres_net` compartida con lyai-ski.
+file provider, cualquier cosa en `lyai_postgres` (el esquema `prensa` viejo sigue allí, congelado).
 
 ---
 

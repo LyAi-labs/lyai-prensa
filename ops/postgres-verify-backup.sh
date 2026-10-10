@@ -1,73 +1,87 @@
 #!/usr/bin/env bash
 #
-# Restore-test semanal: levanta una DB efímera, restaura el último
-# dump completo y comprueba que los esquemas existen. Si falla,
-# sale con código != 0 y cron lo reportará.
+# Restore-test del backup de prensa: un backup no existe hasta que restaura.
 #
-# Variables (en /etc/lyai/backup.env):
-#   BACKUP_DIR  (default: /var/backups/lyai_db)
-#   TEST_PORT   (default: 55432)
-#   PGVECTOR_IMAGE (default: pgvector/pgvector:pg15)
+# Levanta un Postgres efímero con la MISMA imagen que producción (sin red, sin
+# puertos), restaura el dump más reciente y comprueba: SHA-256, extensión
+# pgvector, tablas clave con filas y recuento coherente con la base viva.
+# Sale != 0 y avisa por Telegram si algo falla. No toca la base de producción
+# (solo le lee un recuento).
+#
+#   ops/postgres-verify-backup.sh [fichero.dump]    # por defecto, el más reciente
+#
+# Variables (opcionales): PRENSA_PG_CONTAINER, PRENSA_PG_DB, PRENSA_BACKUP_DIR,
+# LYAI_NOTIFY — las mismas que ops/postgres-backup.sh.
 
 set -euo pipefail
 
-ENV_FILE="${LYAI_BACKUP_ENV:-/etc/lyai/backup.env}"
-[ -f "$ENV_FILE" ] && . "$ENV_FILE"
+CONTAINER="${PRENSA_PG_CONTAINER:-lyai_prensa_postgres}"
+PG_DB="${PRENSA_PG_DB:-prensa}"
+BACKUP_DIR="${PRENSA_BACKUP_DIR:-/opt/lyai/backups/prensa}"
+NOTIFY="${LYAI_NOTIFY-/opt/lyai/bin/lyai-notify.sh}"
+TABLAS_CLAVE=(noticias fuentes claims)
+VERIFY="lyai_prensa_pg_verify_$$"
 
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/lyai_db}"
-TEST_CONTAINER="lyai_postgres_verify"
-TEST_PORT="${TEST_PORT:-55432}"
-PGVECTOR_IMAGE="${PGVECTOR_IMAGE:-pgvector/pgvector:pg15}"
-EXPECTED_SCHEMAS=("lyai" "puertas" "autonoma" "prensa")
+log() { echo "[$(date -u +%FT%TZ)] $*"; }
 
-dump=$(ls -t "$BACKUP_DIR"/diario-*.sql.gz 2>/dev/null | head -n1 || true)
-if [ -z "$dump" ]; then
-  echo "[FAIL] No hay backup diario en $BACKUP_DIR" >&2
+fail() {
+  log "FAIL: $*" >&2
+  if [ -n "$NOTIFY" ] && [ -x "$NOTIFY" ]; then
+    "$NOTIFY" "🔴 Restore-test del backup de prensa FALLÓ: $*" --tag PRENSA-BACKUP-VERIFY >/dev/null 2>&1 || log "aviso por Telegram NO entregado" >&2
+  fi
   exit 1
-fi
-
-cleanup() {
-  docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true
 }
+
+cleanup() { docker rm -f -v "$VERIFY" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-echo "[*] Levantando contenedor de verificación..."
-docker run -d --name "$TEST_CONTAINER" \
-  -e POSTGRES_PASSWORD=verify \
-  -p "$TEST_PORT:5432" \
-  "$PGVECTOR_IMAGE" >/dev/null
+DUMP="${1:-$(ls -1t "$BACKUP_DIR"/prensa_db_*.dump 2>/dev/null | head -n 1 || true)}"
+[ -n "$DUMP" ] && [ -f "$DUMP" ] || fail "no hay ningún dump en $BACKUP_DIR"
 
-# Esperar Postgres
-for _ in $(seq 1 30); do
-  if docker exec "$TEST_CONTAINER" pg_isready -U postgres -q; then
-    break
-  fi
+# 0. El fichero es el que se guardó
+SUMS="$(dirname "$DUMP")/SHA256SUMS"
+if [ -f "$SUMS" ] && grep -q " $(basename "$DUMP")\$" "$SUMS"; then
+  ( cd "$(dirname "$DUMP")" && grep " $(basename "$DUMP")\$" SHA256SUMS | tail -n 1 | sha256sum -c --status ) \
+    || fail "SHA-256 de $(basename "$DUMP") no coincide con SHA256SUMS"
+else
+  log "aviso: $(basename "$DUMP") no figura en SHA256SUMS; sigo sin esa comprobación"
+fi
+
+# 1. Postgres efímero, misma imagen que el de producción
+IMAGE="$(docker inspect "$CONTAINER" --format '{{.Config.Image}}' 2>/dev/null)" || fail "no puedo leer la imagen de $CONTAINER"
+docker run -d --name "$VERIFY" --network none -e POSTGRES_PASSWORD="verify-$$-$RANDOM" "$IMAGE" >/dev/null \
+  || fail "no arranca el contenedor de verificación"
+# Por TCP a propósito: durante el initdb el servidor temporal solo escucha en el socket.
+ready=0
+for _ in $(seq 1 60); do
+  if docker exec "$VERIFY" pg_isready -h 127.0.0.1 -U postgres -q 2>/dev/null; then ready=1; break; fi
   sleep 1
 done
+[ "$ready" = 1 ] || fail "el Postgres de verificación no llegó a estar listo"
 
-echo "[*] Restaurando $dump..."
-gunzip -c "$dump" | docker exec -i "$TEST_CONTAINER" psql -U postgres -q >/dev/null
+# 2. Restaurar
+docker cp -q "$DUMP" "$VERIFY:/tmp/verify.dump"
+docker exec "$VERIFY" createdb -U postgres verify
+docker exec "$VERIFY" pg_restore -U postgres -d verify --no-owner --no-privileges --single-transaction --exit-on-error /tmp/verify.dump \
+  2>/tmp/prensa-verify-err.$$ || fail "pg_restore: $(head -n 3 /tmp/prensa-verify-err.$$ | tr '\n' ' ')"
+rm -f /tmp/prensa-verify-err.$$
 
-echo "[*] Comprobando esquemas..."
-for schema in "${EXPECTED_SCHEMAS[@]}"; do
-  count=$(docker exec "$TEST_CONTAINER" psql -U postgres -d lyai_db -At \
-    -c "SELECT count(*) FROM information_schema.schemata WHERE schema_name='$schema';")
-  if [ "$count" != "1" ]; then
-    echo "[FAIL] Esquema '$schema' ausente en el dump $(basename "$dump")" >&2
-    exit 1
-  fi
+q() { docker exec "$VERIFY" psql -U postgres -d verify -X -At -c "$1"; }
+
+# 3. Comprobar
+[ "$(q "select count(*) from pg_extension where extname = 'vector'")" = 1 ] || fail "el dump restaurado no trae la extensión vector"
+resumen=""
+for t in "${TABLAS_CLAVE[@]}"; do
+  n="$(q "select count(*) from prensa.$t")" || fail "prensa.$t no existe en el dump restaurado"
+  [ "$n" -gt 0 ] || fail "prensa.$t se restauró vacía"
+  resumen+="$t=$n "
 done
+tablas="$(q "select count(*) from pg_tables where schemaname = 'prensa'")"
 
-# Sanity check: contar tablas por esquema (al menos una en cada uno)
-for schema in "${EXPECTED_SCHEMAS[@]}"; do
-  tcount=$(docker exec "$TEST_CONTAINER" psql -U postgres -d lyai_db -At \
-    -c "SELECT count(*) FROM information_schema.tables
-        WHERE table_schema='$schema';")
-  if [ "$tcount" -lt 1 ]; then
-    echo "[FAIL] Esquema '$schema' restaurado pero sin tablas" >&2
-    exit 1
-  fi
-  echo "  $schema: $tcount tablas"
-done
+# El backup no puede tener más noticias que la base viva, ni quedarse muy por detrás.
+restauradas="$(q "select count(*) from prensa.noticias")"
+vivas="$(docker exec "$CONTAINER" psql -U postgres -d "$PG_DB" -X -At -c "select count(*) from prensa.noticias")" || fail "no puedo contar en $CONTAINER/$PG_DB"
+[ "$restauradas" -le "$vivas" ] || fail "el backup trae más noticias ($restauradas) que la base viva ($vivas)"
+[ $(( restauradas * 100 )) -ge $(( vivas * 80 )) ] || fail "el backup trae $restauradas noticias y la base viva $vivas: demasiado viejo o truncado"
 
-echo "[OK] Backup $(basename "$dump") restaura limpio con los 4 esquemas."
+log "OK: $(basename "$DUMP") restaura limpio · $tablas tablas · ${resumen}· base viva: noticias=$vivas"

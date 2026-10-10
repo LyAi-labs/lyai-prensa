@@ -59,10 +59,10 @@ además Ollama corriendo localmente con el modelo `bge-m3` descargado
 
 ## Producción
 
-Desplegado con `docker-compose` (no el plugin `docker compose`) detrás de Traefik, por
-labels de Docker — no por el file provider. Dos servicios: `prensa` (frontend, nginx) y
-`api` (FastAPI), ambos en `prensa.lyai.es`. Comparte el Postgres de `lyai-ski`
-(schema `prensa` dentro de la misma base `lyai_db`).
+Desplegado con `docker-compose` (no el plugin `docker compose`) detrás de Traefik. Dos
+servicios: `prensa` (frontend, nginx) y `api` (FastAPI), ambos en `prensa.lyai.es`. La base
+de datos es un Postgres propio con pgvector (`docker-compose.db.yml`, contenedor
+`lyai_prensa_postgres`, base `prensa`).
 
 Detalles operativos (redes, gotchas de despliegue, estado del pipeline, restricciones de
 coste) → [`CLAUDE.md`](./CLAUDE.md).
