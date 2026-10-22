@@ -29,21 +29,24 @@
 /* ── Rotate hint (móvil en vertical) ─────────────────────────────────── */
 .rotate-hint {
   position: fixed;
-  top: max(10px, env(safe-area-inset-top));
+  bottom: max(20px, env(safe-area-inset-bottom, 20px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 50;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   border-radius: 999px;
-  background: rgba(20, 22, 26, 0.9);
+  background: rgba(20, 22, 26, 0.94);
   color: #e8e8e8;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
   line-height: 1.2;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 1px 1px rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: auto;
 }
 
 .rotate-hint__icon {

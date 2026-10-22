@@ -1132,6 +1132,13 @@ export default function WallGL({
       let startX = 0
       let startY = 0
 
+      // Soporte multi-touch: pellizco con 2 dedos (pinch-to-zoom en móvil)
+      const activePointers = new Map<number, { x: number; y: number }>()
+      let isPinching = false
+      let pinchStartDist = 0
+      let pinchStartZoom = 0
+      const PINCH_ZOOM_FACTOR = 3.5
+
       const raycaster = new THREE.Raycaster()
       const mouseVec = new THREE.Vector2()
 
@@ -1315,25 +1322,63 @@ export default function WallGL({
       }
 
       const onDown = (e: PointerEvent) => {
-        if (e.button !== 0) return
+        if (e.button !== 0 && e.pointerType === 'mouse') return
         clearDwell()
         holdOpened = false
-        dragging = true
-        lastX = e.clientX
-        startX = e.clientX
-        startY = e.clientY
-        samples.length = 0
-        pushSample(performance.now(), e.clientX)
-        velX = 0
-        el.setPointerCapture(e.pointerId)
-        el.style.cursor = 'grabbing'
-        if (e.pointerType === 'touch') {
-          const m = pickAt(e.clientX, e.clientY)
-          if (m) armDwell(e.clientX, e.clientY, m, true)
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        try {
+          el.setPointerCapture(e.pointerId)
+        } catch {}
+
+        if (activePointers.size === 1) {
+          isPinching = false
+          dragging = true
+          lastX = e.clientX
+          startX = e.clientX
+          startY = e.clientY
+          samples.length = 0
+          pushSample(performance.now(), e.clientX)
+          velX = 0
+          el.style.cursor = 'grabbing'
+          if (e.pointerType === 'touch') {
+            const m = pickAt(e.clientX, e.clientY)
+            if (m) armDwell(e.clientX, e.clientY, m, true)
+          }
+        } else if (activePointers.size === 2) {
+          // Segundo dedo colocado en pantalla táctil → modo pellizco (zoom de cámara 3D)
+          isPinching = true
+          clearDwell()
+          dragging = false
+          samples.length = 0
+          velX = 0
+          const pts = Array.from(activePointers.values())
+          pinchStartDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+          pinchStartZoom = zoomTarget
         }
       }
 
       const onMove = (e: PointerEvent) => {
+        if (activePointers.has(e.pointerId)) {
+          activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        }
+
+        // Manejo de pellizco con 2 dedos (pinch-to-zoom en móvil)
+        if (isPinching && activePointers.size >= 2) {
+          clearDwell()
+          const pts = Array.from(activePointers.values())
+          const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+          if (pinchStartDist > 0) {
+            const distDelta = currentDist - pinchStartDist
+            // Dedos se separan (distDelta > 0) -> acercar cámara (zoom in, menor zoomTarget)
+            // Dedos se juntan (distDelta < 0) -> alejar cámara (zoom out, mayor zoomTarget)
+            zoomTarget = Math.max(
+              ZOOM_MIN,
+              Math.min(ZOOM_MAX, pinchStartZoom - distDelta * PINCH_ZOOM_FACTOR),
+            )
+          }
+          return
+        }
+
         // Con el dedo, moverse más de DWELL_TOUCH_SLOP es scroll: no es «parar».
         if (
           e.pointerType === 'touch' &&
@@ -1351,6 +1396,34 @@ export default function WallGL({
 
       const onUp = (e: PointerEvent) => {
         clearDwell()
+        try {
+          if (el.hasPointerCapture(e.pointerId)) {
+            el.releasePointerCapture(e.pointerId)
+          }
+        } catch {}
+        activePointers.delete(e.pointerId)
+
+        if (isPinching) {
+          if (activePointers.size === 0) {
+            isPinching = false
+            dragging = false
+            el.style.cursor = 'grab'
+          } else if (activePointers.size === 1) {
+            // Queda un solo dedo: restauramos para que pueda seguir arrastrando sin salto
+            isPinching = false
+            const remaining = activePointers.values().next().value
+            if (remaining) {
+              lastX = remaining.x
+              startX = remaining.x
+              startY = remaining.y
+              samples.length = 0
+              pushSample(performance.now(), remaining.x)
+              dragging = true
+            }
+          }
+          return // Evita que soltar los dedos de un pellizco abra una tarjeta accidentalmente
+        }
+
         if (!dragging) return
         dragging = false
         el.style.cursor = 'grab'
@@ -1413,6 +1486,7 @@ export default function WallGL({
       el.addEventListener('pointerleave', onCanvasLeave)
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
+      window.addEventListener('pointercancel', onUp)
       el.addEventListener('wheel', onWheel, { passive: false })
 
       const onResize = () => {
@@ -1479,6 +1553,7 @@ export default function WallGL({
         setOverlay(null)
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('pointercancel', onUp)
         el.removeEventListener('wheel', onWheel)
         window.removeEventListener('resize', onResize)
         gsap.killTweensOf(jumpDolly)

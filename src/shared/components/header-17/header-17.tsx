@@ -38,6 +38,7 @@ export interface Header17Props {
   logo?: React.ReactNode;
   actions?: React.ReactNode;
   mobileActions?: React.ReactNode;
+  mobileHeaderExtra?: React.ReactNode;
   className?: string;
   children?: React.ReactNode;
   onSignIn?: () => void;
@@ -51,6 +52,7 @@ export function Header17({
   logo,
   actions,
   mobileActions,
+  mobileHeaderExtra,
   className = "",
   children,
   onSignIn,
@@ -71,17 +73,17 @@ export function Header17({
 
   return (
     <section className={`bg-background border-b border-border/40 ${className}`.trim()}>
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 sm:px-10">
+      <header className="mx-auto flex max-w-7xl items-center justify-between px-3 py-2 sm:px-6 sm:py-3">
         {/* Logo */}
         <a
           href={brandHref}
-          className="flex items-center gap-2 font-semibold tracking-tight text-foreground select-none"
+          className="flex items-center gap-2 font-semibold tracking-tight text-foreground select-none shrink-0"
         >
           {brandElement}
         </a>
 
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 xl:flex">
           {navLinks.map((link) => (
             <a
               key={link.label}
@@ -106,7 +108,7 @@ export function Header17({
         </nav>
 
         {/* Desktop actions */}
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-2 xl:flex">
           {actions ?? (
             <>
               <Button size="sm" variant="ghost" onClick={onSignIn}>
@@ -119,85 +121,88 @@ export function Header17({
           )}
         </div>
 
-        {/* Mobile sheet trigger */}
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <button
-              type="button"
-              aria-label="Open menu"
-              className="grid size-9 place-items-center rounded-full border border-border text-foreground transition-colors hover:bg-muted md:hidden"
-            >
-              <Menu className="size-4" />
-            </button>
-          </SheetTrigger>
-          <SheetContent side="right" className="flex w-72 flex-col p-6">
-            <SheetHeader className="mb-6 text-left">
-              <SheetTitle asChild>
-                <a
-                  href={brandHref}
-                  className="flex items-center gap-2 font-semibold tracking-tight text-foreground"
-                  onClick={() => setOpen(false)}
-                >
-                  {brandElement}
-                </a>
-              </SheetTitle>
-            </SheetHeader>
+        {/* Mobile controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2 xl:hidden">
+          {mobileHeaderExtra}
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <button
+                type="button"
+                aria-label="Abrir menú"
+                className="grid size-8 sm:size-9 place-items-center rounded-full border border-neutral-800 bg-neutral-900/90 text-foreground transition-colors hover:bg-neutral-800 cursor-pointer"
+              >
+                <Menu className="size-4" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="right" className="flex w-72 sm:w-80 flex-col p-6 bg-neutral-950 text-neutral-100 border-neutral-800 z-[110]">
+              <SheetHeader className="mb-6 text-left">
+                <SheetTitle asChild>
+                  <a
+                    href={brandHref}
+                    className="flex items-center gap-2 font-semibold tracking-tight text-foreground"
+                    onClick={() => setOpen(false)}
+                  >
+                    {brandElement}
+                  </a>
+                </SheetTitle>
+              </SheetHeader>
 
-            <nav className="flex flex-col gap-1">
-              {navLinks.map((link) => (
-                <a
-                  key={link.label}
-                  href={link.href || "#"}
-                  onClick={(e) => {
-                    if (link.onClick) {
-                      e.preventDefault();
-                      link.onClick(e);
-                    }
-                    setOpen(false);
-                  }}
-                  className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors flex items-center justify-between cursor-pointer ${
-                    link.active
-                      ? "bg-muted text-foreground font-semibold"
-                      : "text-foreground hover:bg-muted"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    {link.icon}
-                    {link.label}
-                  </span>
-                  {link.badge}
-                </a>
-              ))}
-            </nav>
+              <nav className="flex flex-col gap-1">
+                {navLinks.map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href || "#"}
+                    onClick={(e) => {
+                      if (link.onClick) {
+                        e.preventDefault();
+                        link.onClick(e);
+                      }
+                      setOpen(false);
+                    }}
+                    className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                      link.active
+                        ? "bg-neutral-800 text-foreground font-semibold"
+                        : "text-neutral-300 hover:bg-neutral-900"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      {link.icon}
+                      {link.label}
+                    </span>
+                    {link.badge}
+                  </a>
+                ))}
+              </nav>
 
-            <div className="mt-auto flex flex-col gap-2 border-t border-border pt-6">
-              {mobileActions ??
-                actions ?? (
-                  <>
-                    <Button
-                      variant="outline"
-                      className="w-full rounded-md"
-                      onClick={() => {
-                        onSignIn?.();
-                        setOpen(false);
-                      }}
-                    >
-                      Sign in
-                    </Button>
-                    <Button
-                      className="w-full rounded-full"
-                      onClick={() => {
-                        onGetStarted?.();
-                        setOpen(false);
-                      }}
-                    >
-                      Get started <ArrowRight className="size-4 ml-1" />
-                    </Button>
-                  </>
-                )}
-            </div>
-          </SheetContent>
-        </Sheet>
+              <div className="mt-auto flex flex-col gap-2 border-t border-neutral-800 pt-6">
+                {mobileActions ??
+                  actions ?? (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full rounded-md"
+                        onClick={() => {
+                          onSignIn?.();
+                          setOpen(false);
+                        }}
+                      >
+                        Sign in
+                      </Button>
+                      <Button
+                        className="w-full rounded-full"
+                        onClick={() => {
+                          onGetStarted?.();
+                          setOpen(false);
+                        }}
+                      >
+                        Get started <ArrowRight className="size-4 ml-1" />
+                      </Button>
+                    </>
+                  )}
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </header>
       {children}
     </section>

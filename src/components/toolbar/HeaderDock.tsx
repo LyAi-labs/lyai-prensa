@@ -313,6 +313,16 @@ export default function HeaderDock({
   // Acciones en la versión móvil del menú (Sheet lateral)
   const mobileActions = (
     <div className="flex flex-col gap-2">
+      {activeFiltersCount > 0 && (
+        <button
+          type="button"
+          onClick={resetFilters}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20"
+        >
+          ↺ Restablecer filtros activos ({activeFiltersCount})
+        </button>
+      )}
+
       <button
         type="button"
         onClick={() => {
@@ -353,6 +363,89 @@ export default function HeaderDock({
     </div>
   )
 
+  // Controles compactos para cabecera en móvil y tablet (< xl)
+  const mobileHeaderExtra = (
+    <div className="flex items-center gap-1 sm:gap-2">
+      {/* Selector rápido Muro 3D / Línea de tiempo */}
+      <div className="flex items-center bg-neutral-900/90 border border-neutral-800/90 rounded-full p-0.5 shadow-inner">
+        <button
+          type="button"
+          onClick={() => onViewChange?.('muro')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-all cursor-pointer ${
+            view === 'muro'
+              ? 'bg-neutral-800 text-white font-semibold shadow-sm'
+              : 'text-neutral-400 hover:text-white'
+          }`}
+          title="Ver Muro 3D"
+        >
+          <IconLayoutGrid className="size-3.5" strokeWidth={2.2} />
+          <span className="hidden sm:inline">Muro</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewChange?.('tiempo')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-all cursor-pointer ${
+            view === 'tiempo'
+              ? 'bg-neutral-800 text-white font-semibold shadow-sm'
+              : 'text-neutral-400 hover:text-white'
+          }`}
+          title="Ver Línea de tiempo"
+        >
+          <IconGitBranch className="size-3.5" strokeWidth={2.2} />
+          <span className="hidden sm:inline">Tiempo</span>
+        </button>
+      </div>
+
+      {/* Botón rápido Contradicciones en móvil */}
+      <button
+        type="button"
+        onClick={() => {
+          onFiltersChange({
+            ...filters,
+            soloContradicciones: !filters.soloContradicciones,
+          })
+        }}
+        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+          filters.soloContradicciones
+            ? 'bg-rose-600 text-white border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]'
+            : 'bg-neutral-900/80 text-rose-300 border-rose-500/30 hover:border-rose-500/50'
+        }`}
+        title="Mostrar únicamente noticias con contradicciones editoriales detectadas"
+      >
+        <IconBolt
+          className={`size-3.5 ${
+            filters.soloContradicciones ? 'fill-white text-white' : 'text-amber-400 fill-amber-400/20'
+          }`}
+          strokeWidth={2.4}
+        />
+        {contraStats && contraStats.totalContradicciones > 0 && (
+          <span className="text-[11px] font-bold leading-none">{contraStats.totalContradicciones}</span>
+        )}
+      </button>
+
+      {/* Botón rápido Buscar / Filtrar en móvil */}
+      <button
+        type="button"
+        onClick={() => {
+          setFiltersOpen((o) => !o)
+          setCalendarOpen(false)
+        }}
+        className={`size-8 rounded-full border flex items-center justify-center transition-all cursor-pointer relative ${
+          filtersOpen || activeFiltersCount > 0
+            ? 'bg-white text-neutral-900 border-white font-bold shadow-sm'
+            : 'bg-neutral-900/80 text-neutral-300 border-neutral-800 hover:text-white'
+        }`}
+        title="Buscar y filtrar noticias"
+        aria-label="Buscar y filtrar"
+      >
+        <IconSearch className="size-3.5" strokeWidth={2.2} />
+        {activeFiltersCount > 0 && !filtersOpen && (
+          <span className="absolute -top-1 -right-1 size-2 rounded-full bg-cyan-400" />
+        )}
+      </button>
+    </div>
+  )
+
   return (
     <div className="header-dock-container" ref={dockRef} onClick={(e) => e.stopPropagation()}>
       {/* ── CABECERA PRINCIPAL MODERNA (Header17 de Blockus UI / lyai-shared) ── */}
@@ -362,6 +455,7 @@ export default function HeaderDock({
         navLinks={navLinks}
         actions={headerActions}
         mobileActions={mobileActions}
+        mobileHeaderExtra={mobileHeaderExtra}
         className="bg-neutral-950/85 backdrop-blur-md border-b border-neutral-800/80 text-neutral-100"
       >
         {/* ── POPOVER: BÚSQUEDA Y FILTROS ── */}
