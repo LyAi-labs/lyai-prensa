@@ -171,3 +171,29 @@ que no se ven en tiempo real. Ver
   `up -d --force-recreate prensa`, commit `3d5f3d4`. Incluye: dropdown de búsqueda en vivo,
   tarjetas de navegación del muro con fecha+pill-button. Verificado con Playwright contra
   prensa.lyai.es: 200, sin errores de consola nuevos.
+
+## 2026-10-22 — Antigravity (AGY)
+- **4 Iniciativas estratégicas completadas y desplegadas**:
+  1. **Calibración y calidad del detector de contradicciones (`pipeline/judge_contradictions.py`)**:
+     - Prompt calibrado con escala de intensidad gradual (0.3-0.5 leve/aproximación, 0.6-0.8 moderada/factual, 0.9-1.0 grave/excluyente).
+     - Campo `razonamiento` estricto y con fallback automático; nunca queda vacío ni nulo.
+     - Filtro temporal en `filtrar_candidatos()` que descarta pares con desfase > 4 días para evitar falsos positivos por evolución informativa natural.
+     - Saneamiento en base de datos `prensa`: purgadas noticias/claims/evaluaciones/embeddings seed de prueba (10 claims, 48 evaluaciones), corregida fecha futura en noticia corrupta y completados los razonamientos vacíos en 13 contradicciones históricas.
+  2. **Seguridad y hardening (`api/main.py`, `Dockerfile.api`, `docker/nginx.conf`)**:
+     - Mitigación exhaustiva de SSRF en `/api/image-proxy`: validación estricta de esquemas `http`/`https`, resolución DNS previa y bloqueo de rangos de red privados, loopback, link-local, multicast y reservados (`ipaddress`).
+     - Protección contra DoS: streaming con corte estricto a 12 MB (`MAX_PROXY_IMAGE_BYTES`) y configuración de `Image.MAX_IMAGE_PIXELS = 10_000_000` en Pillow.
+     - Contenedor `lyai_prensa_api` asegurado ejecutando como usuario sin privilegios `appuser` (UID 10001).
+     - Cabeceras de seguridad globales en Nginx: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` aplicadas y verificadas en `/`, `/archivo`, PWA y estáticos.
+  3. **Anonimato y de-branding**:
+     - Auto-alojamiento local completo de Google Fonts en `public/fonts/` (12 archivos WOFF2 de *Bodoni Moda*, *Playfair Display*, *JetBrains Mono*, *UnifrakturMaguntia* y `fonts.css`).
+     - Eliminadas conexiones de terceros hacia `fonts.googleapis.com` y `fonts.gstatic.com` (0 peticiones externas, verificado con Playwright).
+     - Renombrado de marca en frontend y PWA a **"Observatorio de Medios"** (`index.html`, `manifest.json`, `HeaderDock.tsx`).
+     - Versión PWA actualizada a `v1.6.0` en `public/sw.js`.
+  4. **SEO e indexación pública**:
+     - Creado `public/robots.txt` permitiendo indexación de portal y archivo (`/`, `/archivo/`, `/archivo/*`) y bloqueando endpoints internos `/api/`.
+     - Creado `public/sitemap.xml` con URLs canónicas e índices de frecuencia.
+     - Enriquecido `/archivo/index.html` con OpenGraph, Twitter Cards y Schema.org JSON-LD estructurado (`WebSite` + `SearchAction`).
+- **Verificación empírica (AUR-065)**:
+  - Playwright E2E en desktop y mobile: HTTP 200, 0 llamadas a fuentes externas, 0 errores de consola.
+  - Veto de Aurelius comprobado inactivo (`cat /opt/lyai/state/aurelius-veto.json` -> active: false).
+  - Cambios commiteados (`c6af8e1`) y pusheados a `feature/muro-mejoras-normal`.
