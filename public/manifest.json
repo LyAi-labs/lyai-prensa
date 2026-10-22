@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "LyAi Prensa — Observador de Medios",
-  "short_name": "LyAi Prensa",
-  "description": "Observatorio de medios españoles en tiempo real con detección de contradicciones y muro 3D.",
+  "name": "Observatorio de Medios — Prensa Española",
+  "short_name": "Observatorio",
+  "description": "Observatorio de medios españoles en tiempo real con detección automática de contradicciones y muro 3D.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

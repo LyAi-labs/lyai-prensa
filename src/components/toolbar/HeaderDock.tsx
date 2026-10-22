@@ -245,10 +245,10 @@ export default function HeaderDock({
       </div>
       <div className="flex flex-col text-left">
         <span className="font-semibold text-sm text-white tracking-tight group-hover:text-neutral-200 transition-colors">
-          LyAi · Prensa
+          Observatorio
         </span>
         <span className="hidden sm:inline-block text-[10px] text-neutral-400 uppercase tracking-widest font-mono">
-          Observatorio de medios
+          de medios
         </span>
       </div>
     </div>
@@ -450,7 +450,7 @@ export default function HeaderDock({
     <div className="header-dock-container" ref={dockRef} onClick={(e) => e.stopPropagation()}>
       {/* ── CABECERA PRINCIPAL MODERNA (Header17 de Blockus UI / lyai-shared) ── */}
       <Header17
-        brandName="LyAi · Prensa"
+        brandName="Observatorio de Medios"
         logo={brandLogo}
         navLinks={navLinks}
         actions={headerActions}

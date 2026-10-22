@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import ipaddress
 import os
+import socket
+import urllib.parse
 from datetime import date, datetime
 from pathlib import Path
 
@@ -288,15 +291,60 @@ def get_httpx_client() -> httpx.AsyncClient:
     return _HTTPX_CLIENT
 
 
+MAX_PROXY_IMAGE_BYTES = 12 * 1024 * 1024  # 12 MB máx para evitar DoS por memoria
+
+
+def is_safe_image_url(url: str) -> tuple[bool, str]:
+    """Protección contra SSRF: verifica esquema, sintaxis y que la IP de destino no sea privada/interna."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        scheme = parsed.scheme.lower()
+        if scheme not in ("http", "https"):
+            return False, "Esquema no permitido"
+
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "Hostname vacío"
+
+        hostname_lower = hostname.lower()
+        if (
+            hostname_lower in ("localhost", "local", "internal")
+            or hostname_lower.endswith((".local", ".internal", ".lan", ".onion"))
+        ):
+            return False, "Dominio privado o reservado"
+
+        # Resolver nombre de host y comprobar que todas sus IPs sean públicas y enrutables
+        addrs = socket.getaddrinfo(hostname, None)
+        for _, _, _, _, sockaddr in addrs:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                return False, f"Dirección IP no pública ({ip})"
+        return True, "OK"
+    except Exception as e:
+        return False, f"Error validando URL: {e}"
+
+
 @app.get("/api/image-proxy")
 @app.head("/api/image-proxy")
 async def image_proxy(url: str = Query(...)):
     """Proxy y optimizador de imágenes para el muro 3D y vista bento.
     Descarga la imagen remota, la redimensiona a thumbnail (máx 960x640)
     y la comprime a WebP, guardándola en caché en disco.
-    Reduce imágenes pesadas (hasta 8MB) manteniendo nitidez en las cards 3D."""
+    Reduce imágenes pesadas manteniendo nitidez en las cards 3D."""
     if not url or not (url.startswith("http://") or url.startswith("https://")):
         return Response(status_code=400, content="URL inválida")
+
+    safe, reason = is_safe_image_url(url)
+    if not safe:
+        return Response(status_code=403, content=f"Acceso denegado: {reason}")
 
     from pipeline.qa_images import is_placeholder_image
     if is_placeholder_image(url):
@@ -321,19 +369,36 @@ async def image_proxy(url: str = Query(...)):
         except Exception:
             pass
 
-    # 2. Descargar imagen remota con pool persistente
+    # 2. Descargar imagen remota con pool persistente y límite de tamaño
     try:
         client = get_httpx_client()
-        resp = await client.get(url)
-        if resp.status_code != 200:
-            return Response(status_code=resp.status_code)
-        raw_bytes = resp.content
+        async with client.stream("GET", url) as stream_resp:
+            if stream_resp.status_code != 200:
+                return Response(status_code=stream_resp.status_code)
+
+            content_length = stream_resp.headers.get("content-length")
+            if content_length and int(content_length) > MAX_PROXY_IMAGE_BYTES:
+                return Response(status_code=413, content="Imagen demasiado pesada")
+
+            chunks = []
+            total_downloaded = 0
+            async for chunk in stream_resp.aiter_bytes():
+                total_downloaded += len(chunk)
+                if total_downloaded > MAX_PROXY_IMAGE_BYTES:
+                    return Response(status_code=413, content="Imagen excede el tamaño máximo permitido")
+                chunks.append(chunk)
+
+            raw_bytes = b"".join(chunks)
+
         if not raw_bytes:
             return Response(status_code=404)
 
         # 3. Optimización con PIL (redimensión y conversión a WebP)
         try:
             from PIL import Image
+            # Prevenir ataques de bomba de descompresión (decompression bomb)
+            Image.MAX_IMAGE_PIXELS = 10_000_000
+
             img = Image.open(io.BytesIO(raw_bytes))
             img.thumbnail((960, 640), Image.Resampling.LANCZOS)
             if img.mode in ("RGBA", "LA", "P"):
@@ -360,7 +425,7 @@ async def image_proxy(url: str = Query(...)):
                 },
             )
         except Exception:
-            content_type = resp.headers.get("content-type", "image/jpeg")
+            content_type = stream_resp.headers.get("content-type", "image/jpeg")
             return Response(
                 content=raw_bytes,
                 media_type=content_type,

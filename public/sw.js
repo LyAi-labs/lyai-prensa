@@ -17,7 +17,8 @@ const PRECACHE_ASSETS = [
   '/icon-192.png',
   '/icon-512.png',
   '/icon-maskable-512.png',
-  '/apple-touch-icon.png'
+  '/apple-touch-icon.png',
+  '/fonts/fonts.css'
 ];
 
 // 1. Install Event: Cache App Shell & skip waiting immediately
@@ -107,22 +108,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // C. Google Fonts / External CDNs: Stale-While-Revalidate
-  if (url.hostname.includes('fonts.googleapis.com') || url.hostname.includes('fonts.gstatic.com')) {
-    event.respondWith(
-      caches.match(req).then((cached) => {
-        const fetchPromise = fetch(req).then((networkRes) => {
-          if (networkRes && networkRes.status === 200) {
-            const clone = networkRes.clone();
-            caches.open(STATIC_CACHE).then((cache) => cache.put(req, clone));
-          }
-          return networkRes;
-        }).catch(() => cached);
-        return cached || fetchPromise;
-      })
-    );
-    return;
-  }
 
   // D. Static Assets (JS, CSS, Images, Three.js textures): Stale-While-Revalidate
   event.respondWith(

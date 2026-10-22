@@ -54,11 +54,23 @@ SLEEP_ENTRE_LLAMADAS = 4.5
 
 CRITERIOS_PATH = Path(__file__).resolve().parent.parent / "docs" / "contradiccion-criterios.md"
 
-CABECERA_BATCH = """Vas a recibir un CLAIM FUENTE y una lista numerada de CLAIMS CANDIDATOS de otras noticias. Para cada candidato, aplica exactamente el criterio de abajo y devuelve un veredicto (label + intensidad + razonamiento breve).
+CABECERA_BATCH = """Vas a recibir un CLAIM FUENTE y una lista numerada de CLAIMS CANDIDATOS de otras noticias, incluyendo su medio emisor y fecha/hora de publicación.
 
-- Si el label es `contradiccion` por cifras oficiales de organismos distintos (ver "Casos límite" abajo), marca `metadata_tipo="fuentes_oficiales"`.
-- Para labels que no sean `contradiccion`, usa `intensidad=0`.
-- `candidato_idx` en tu respuesta debe ser el número exacto (1-based) del candidato en la lista recibida.
+Para cada candidato, evalúa si existe una CONTRADICCIÓN FACTUAL con el claim fuente según los criterios de abajo y devuelve:
+- `candidato_idx`: Número exacto (1-based) del candidato.
+- `label`: "contradiccion", "coincidencia", "no_relacionado" o "ambiguo".
+- `intensidad`: Número flotante calibrado entre 0.0 y 1.0 según la gravedad de la incompatibilidad:
+    * 0.0: Obligatorio si el label NO es 'contradiccion'.
+    * 0.3 a 0.5 (Discrepancia leve): Pequeñas diferencias numéricas de aproximación o estimación (ej. magnitudes sísmicas 7.6 vs 7.7, cifras de asistentes preliminares 10.000 vs 11.500).
+    * 0.6 a 0.8 (Discrepancia moderada): Versiones claramente opuestas sobre causantes, autoría, detenidos o datos incompatibles (ej. 8 fallecidos vs 20 fallecidos).
+    * 0.9 a 1.0 (Contradicción grave / excluyente): Declaraciones antagónicas absolutas (ej. "habrá amnistía" vs "se descarta la amnistía", o "se firmó el acuerdo" vs "fracasó la negociación").
+- `razonamiento`: 1-2 frases concisas y obligatorias explicando por qué son incompatibles y justificando la intensidad elegida. NUNCA lo dejes vacío.
+- `metadata_tipo`: 'fuentes_oficiales' si los medios reportan fielmente cifras de organismos distintos (ej. INE vs Ministerio); null en cualquier otro caso.
+
+REGLAS CRÍTICAS:
+1. EVOLUCIÓN TEMPORAL NO ES CONTRADICCIÓN: Si una noticia es posterior a otra y refleja una actualización legítima o cambio de estado de los acontecimientos (ej. balance a las 10:00 vs balance ampliado a las 18:00), marca `no_relacionado` o `ambiguo`, NUNCA `contradiccion`.
+2. Si los hechos sucedieron en días o lugares distintos, son eventos diferentes: clasifica como `no_relacionado`.
+3. Ante duda razonable: usa `ambiguo` con intensidad 0.0.
 
 ---
 
@@ -74,7 +86,7 @@ class Veredicto(BaseModel):
     candidato_idx: int = Field(description="Índice 1-based del candidato evaluado")
     label: Literal["contradiccion", "coincidencia", "no_relacionado", "ambiguo"]
     intensidad: float = Field(default=0.0, ge=0, le=1)
-    razonamiento: str = Field(default="", description="1-2 frases justificando el label")
+    razonamiento: str = Field(default="", description="1-2 frases justificando el label y la intensidad asignada")
     metadata_tipo: str | None = Field(
         default=None,
         description="'fuentes_oficiales' si aplica el caso límite documentado; null en cualquier otro caso.",
@@ -87,7 +99,7 @@ class JuicioClaim(BaseModel):
 
 SELECT_CLAIMS_SQL = """
 SELECT c.id AS claim_id, c.noticia_id, c.sujeto, c.predicado, c.objeto, c.cita,
-       n.titular, f.nombre AS fuente_nombre, e.embedding
+       n.titular, n.publicada_en, f.nombre AS fuente_nombre, e.embedding
 FROM prensa.claims c
 JOIN prensa.embeddings e ON e.claim_id = c.id
 JOIN prensa.noticias n ON n.id = c.noticia_id
@@ -97,7 +109,7 @@ ORDER BY c.created_at DESC
 
 CANDIDATOS_ANN_SQL = """
 SELECT c2.id AS claim_id, c2.noticia_id, c2.sujeto, c2.predicado, c2.objeto, c2.cita,
-       n2.titular, f2.nombre AS fuente_nombre,
+       n2.titular, n2.publicada_en, f2.nombre AS fuente_nombre,
        (e2.embedding <=> %(vec)s::vector) AS distancia
 FROM prensa.embeddings e2
 JOIN prensa.claims c2 ON c2.id = e2.claim_id
@@ -175,16 +187,33 @@ def filtrar_candidatos(cur, claim_fuente: dict[str, Any], candidatos: list[dict[
     for a, b in cur.fetchall():
         ya_evaluados.add(a if a != claim_fuente["claim_id"] else b)
 
-    filtrados = [
-        c
-        for c in candidatos
-        if c["noticia_id"] != claim_fuente["noticia_id"] and c["claim_id"] not in ya_evaluados
-    ]
+    fuente_fecha = claim_fuente.get("publicada_en")
+
+    filtrados = []
+    for c in candidatos:
+        if c["noticia_id"] == claim_fuente["noticia_id"] or c["claim_id"] in ya_evaluados:
+            continue
+        # Descartar pares con más de 4 días de diferencia para evitar comparar eventos distintos o evoluciones temporales
+        c_fecha = c.get("publicada_en")
+        if fuente_fecha and c_fecha:
+            diff_dias = abs((fuente_fecha - c_fecha).total_seconds()) / 86400
+            if diff_dias > 4.0:
+                continue
+        filtrados.append(c)
+
     return filtrados[:MAX_CANDIDATOS]
 
 
 def _format_claim(c: dict[str, Any]) -> str:
-    parts = [f"Noticia: {c['titular']} ({c['fuente_nombre']})", f"Claim: {c['sujeto']} {c['predicado']} {c['objeto']}"]
+    fecha_str = (
+        c["publicada_en"].strftime("%Y-%m-%d %H:%M")
+        if c.get("publicada_en")
+        else "Fecha desconocida"
+    )
+    parts = [
+        f"Noticia: {c['titular']} ({c['fuente_nombre']} · {fecha_str})",
+        f"Claim: {c['sujeto']} {c['predicado']} {c['objeto']}",
+    ]
     if c.get("cita"):
         parts.append(f'Cita: "{c["cita"]}"')
     return "\n  ".join(parts)
@@ -214,16 +243,24 @@ def judge(claim_fuente: dict[str, Any], candidatos: list[dict[str, Any]]):
     if isinstance(data, dict) and "veredictos" in data:
         for v in data["veredictos"]:
             if isinstance(v, dict):
-                if "razonamiento" not in v:
+                if not v.get("razonamiento"):
+                    cand_idx = v.get("candidato_idx", 1) - 1
+                    cand_name = candidatos[cand_idx]["fuente_nombre"] if 0 <= cand_idx < len(candidatos) else "otra fuente"
                     v["razonamiento"] = (
                         v.get("justificacion")
                         or v.get("explicacion")
                         or v.get("motivo")
                         or v.get("reasoning")
-                        or ""
+                        or (
+                            f"Discrepancia factual detectada entre {claim_fuente['fuente_nombre']} y {cand_name}."
+                            if v.get("label") == "contradiccion"
+                            else "Afirmaciones coincidentes o sin relación contradictoria."
+                        )
                     )
                 if "intensidad" not in v:
-                    v["intensidad"] = 0.0
+                    v["intensidad"] = 0.7 if v.get("label") == "contradiccion" else 0.0
+                elif v.get("label") == "contradiccion" and v.get("intensidad", 0) <= 0:
+                    v["intensidad"] = 0.7
                 if "label" in v and v["label"] not in ("contradiccion", "coincidencia", "no_relacionado", "ambiguo"):
                     # Normalizar pequeñas variaciones como 'contradicción' con tilde
                     lbl = str(v["label"]).lower().replace("ó", "o")

@@ -1,0 +1,8 @@
+# robots.txt para Observatorio de Medios (prensa.lyai.es)
+User-agent: *
+Allow: /
+Allow: /archivo/
+Allow: /archivo/*
+Disallow: /api/
+
+Sitemap: https://prensa.lyai.es/sitemap.xml
