@@ -1,0 +1,214 @@
+// Cliente de la API real (ver api/main.py) + adaptación al shape que
+// consume WallGL.tsx. Sustituye a sampleNews.ts como fuente de datos;
+// sampleNews.ts se mantiene como fallback si la API no responde (ver
+// WallGL.tsx), así el muro nunca se queda en blanco.
+
+import { decodeEntities } from './decodeEntities'
+
+const API_BASE: string = import.meta.env.VITE_API_BASE ?? '/api'
+
+export type Claim = {
+  sujeto: string
+  predicado: string
+  objeto: string
+}
+
+export type Contradiccion = {
+  id: string
+  noticiaContrariaId: string
+  fuenteContraria: string
+  tema: string
+  intensidad: number
+  razonamiento: string
+  claimPropio: Claim
+  claimContrario: Claim
+}
+
+export type NewsItem = {
+  id: string
+  source: string
+  sourceColor: string
+  headline: string
+  summary: string
+  publishedAt: string
+  enlace: string
+  imagenUrl: string | null
+  contradicciones: Contradiccion[]
+}
+
+type ApiClaim = {
+  sujeto: string
+  predicado: string
+  objeto: string
+}
+
+type ApiContradiccion = {
+  id: string
+  tema: string
+  intensidad: number
+  razonamiento: string | null
+  noticia_contraria_id: string
+  fuente_contraria: string
+  claim_propio: ApiClaim
+  claim_contrario: ApiClaim
+}
+
+type ApiNoticia = {
+  id: string
+  titular: string
+  descripcion: string
+  enlace: string
+  publicada_en: string
+  imagen_url: string | null
+  fuente_nombre: string
+  fuente_color: string
+  fuente_slug: string
+  intensidad_contradiccion: number
+  eje_z: number
+  contradicciones: ApiContradiccion[]
+}
+
+function pad(n: number): string {
+  return n.toString().padStart(2, '0')
+}
+
+// Mismo formato que usaba sampleNews.ts, para que el estilo visual no
+// cambie al pasar de mock a datos reales.
+function formatPublishedAt(iso: string): string {
+  const d = new Date(iso)
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function mapNoticia(n: ApiNoticia): NewsItem {
+  return {
+    id: n.id,
+    source: n.fuente_nombre,
+    sourceColor: n.fuente_color,
+    headline: decodeEntities(n.titular),
+    summary: decodeEntities(n.descripcion),
+    publishedAt: formatPublishedAt(n.publicada_en),
+    enlace: n.enlace,
+    imagenUrl: n.imagen_url,
+    contradicciones: n.contradicciones.map((c) => ({
+      id: c.id,
+      noticiaContrariaId: c.noticia_contraria_id,
+      fuenteContraria: c.fuente_contraria,
+      tema: c.tema,
+      intensidad: c.intensidad,
+      razonamiento: c.razonamiento ?? '',
+      claimPropio: c.claim_propio,
+      claimContrario: c.claim_contrario,
+    })),
+  }
+}
+
+// Filtros del toolbar (búsqueda + fuente + sección + contradicciones). La
+// clasificación fuente->tipo y la de sección viven solo en el backend
+// (api/classification.py) — el cliente nunca las duplica, solo manda el id.
+export type NewsFilters = {
+  q?: string
+  fuenteTipo?: 'nacional' | 'regional' | 'tv' | 'radio'
+  seccion?: 'economia' | 'deportes' | 'politica' | 'internacional' | 'sociedad' | 'cultura' | 'opinion' | 'tecnologia' | 'otros'
+  soloContradicciones?: boolean
+}
+
+function filtrosToParams(filters?: NewsFilters): Record<string, string> {
+  if (!filters) return {}
+  const out: Record<string, string> = {}
+  if (filters.q) out.q = filters.q
+  if (filters.fuenteTipo) out.fuente_tipo = filters.fuenteTipo
+  if (filters.seccion) out.seccion = filters.seccion
+  if (filters.soloContradicciones) out.solo_contradicciones = 'true'
+  return out
+}
+
+export async function fetchNoticias(limit = 108, offset = 0, antes?: string, filters?: NewsFilters): Promise<NewsItem[]> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset), ...filtrosToParams(filters) })
+  if (antes) params.set('antes', antes)
+  const res = await fetch(`${API_BASE}/noticias?${params}`)
+  if (!res.ok) throw new Error(`API /noticias respondió ${res.status}`)
+  const data: ApiNoticia[] = await res.json()
+  return data.map(mapNoticia)
+}
+export async function fetchNoticiaById(id: string): Promise<NewsItem | null> {
+  try {
+    const res = await fetch(`${API_BASE}/noticias/${id}`)
+    if (!res.ok) return null
+    const data: ApiNoticia = await res.json()
+    return mapNoticia(data)
+  } catch {
+    return null
+  }
+}
+
+// Total real para el contador del muro, con los mismos filtros aplicados —
+// antes del toolbar el total iba hardcodeado (3330) en WallGL.tsx; con
+// filtros activos esa cifra deja de significar nada.
+export async function fetchNoticiasCount(antes?: string, filters?: NewsFilters): Promise<number> {
+  const params = new URLSearchParams(filtrosToParams(filters))
+  if (antes) params.set('antes', antes)
+  const res = await fetch(`${API_BASE}/noticias/count?${params}`)
+  if (!res.ok) throw new Error(`API /noticias/count respondió ${res.status}`)
+  const data: { total: number } = await res.json()
+  return data.total
+}
+
+export interface DiaContradiccionInfo {
+  dia: string
+  count: number
+  noticiasCount: number
+}
+
+// Días (en [desde, hasta)) con contradicciones y su recuento
+// — para marcarlos en el calendario del botón "Hoy". `hasta` es exclusivo.
+export async function fetchDiasContradiccion(
+  desde: string,
+  hasta: string
+): Promise<Map<string, DiaContradiccionInfo>> {
+  const params = new URLSearchParams({ desde, hasta })
+  const res = await fetch(`${API_BASE}/contradicciones/dias?${params}`)
+  if (!res.ok) throw new Error(`API /contradicciones/dias respondió ${res.status}`)
+  const data: Array<string | { dia: string; count: number; noticias_count?: number }> = await res.json()
+  const map = new Map<string, DiaContradiccionInfo>()
+  for (const item of data) {
+    if (typeof item === 'string') {
+      map.set(item, { dia: item, count: 1, noticiasCount: 1 })
+    } else {
+      map.set(item.dia, {
+        dia: item.dia,
+        count: item.count,
+        noticiasCount: item.noticias_count ?? item.count,
+      })
+    }
+  }
+  return map
+}
+
+export interface ContradiccionesConteo {
+  totalContradicciones: number
+  totalNoticias: number
+}
+
+export async function fetchContradiccionesConteo(): Promise<ContradiccionesConteo> {
+  try {
+    const res = await fetch(`${API_BASE}/contradicciones/conteo`)
+    if (!res.ok) throw new Error(`API /contradicciones/conteo respondió ${res.status}`)
+    const data = await res.json()
+    return {
+      totalContradicciones: data.total_contradicciones ?? 0,
+      totalNoticias: data.total_noticias ?? 0,
+    }
+  } catch {
+    return { totalContradicciones: 0, totalNoticias: 0 }
+  }
+}
+
+
+// Número de medios (para la pantalla de carga) — se cuenta en vivo en vez de
+// hardcodear una cifra que se queda vieja.
+export async function fetchNumFuentes(): Promise<number> {
+  const res = await fetch(`${API_BASE}/fuentes`)
+  if (!res.ok) throw new Error(`API /fuentes respondió ${res.status}`)
+  const data: unknown[] = await res.json()
+  return data.length
+}

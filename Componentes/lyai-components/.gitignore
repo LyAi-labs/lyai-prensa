@@ -1,0 +1,12 @@
+# Node & Build artifacts
+node_modules/
+dist/
+build/
+.next/
+*.log
+
+# Environment & OS
+.env
+.env.local
+.DS_Store
+Thumbs.db

@@ -1,0 +1,65 @@
+# Postgres DEDICADO de lyai-prensa (PostgreSQL 16 + pgvector).
+#
+# Es un proyecto compose APARTE del de la app (`name: lyai-prensa-db`): un
+# `docker-compose up -d --build` o un `down` del docker-compose.yml principal
+# no toca este contenedor ni sus datos.
+#
+# Por qué existe: hasta el 2026-10-10 el esquema `prensa` vivía en
+# `lyai_postgres`, el Postgres de lyai-ski. Ver
+# /opt/lyai/wiki/pages/decisions/decision-2026-10-10-prensa-postgres-dedicado.md
+#
+# Primera vez (o servidor nuevo):
+#   docker volume create lyai_prensa_pgdata   # externo a propósito: ni `down -v` lo borra
+#   docker-compose -f docker-compose.db.yml up -d
+#   ops/prensa-db-bootstrap.sh                # roles, extensiones y permisos (idempotente)
+#
+# Secretos: `.env.db` trae solo POSTGRES_PASSWORD (superusuario) y NO lo carga
+# el servicio `api`. Las passwords de los roles de aplicación viven en `.env`
+# (ver .env.example).
+
+name: lyai-prensa-db
+
+services:
+  postgres:
+    # Misma versión que el origen de la migración (PostgreSQL 16.13 + pgvector
+    # 0.8.2). Fijada por digest: un `pull` no la cambia sin editar esta línea.
+    image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+    container_name: lyai_prensa_postgres
+    restart: unless-stopped
+    env_file:
+      - .env.db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: prensa
+    shm_size: 256mb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Solo loopback: lo usa el pipeline, que corre en el HOST (cron). 5432 es
+      # de lyai_postgres y 5435 de puertas_postgres. Nunca publicar en 0.0.0.0:
+      # los puertos publicados por Docker se saltan UFW.
+      - "127.0.0.1:5436:5432"
+    networks:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d prensa -q"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
+    name: lyai_prensa_pgdata
+    external: true
+
+networks:
+  # Red propia: solo este Postgres y el contenedor `api` de prensa. No está
+  # unida a `lyai-ski_ski_internal` ni a `lyai_shared_net`.
+  db:
+    name: lyai_prensa_db_net
