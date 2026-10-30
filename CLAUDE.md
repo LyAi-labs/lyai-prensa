@@ -205,7 +205,7 @@ gastar hasta que genere ingresos:
   404 real; el sucesor gratuito hoy es `gemini-3.8-flash`. Si esto vuelve a fallar con 404, la
   política volvió a quedarse atrás — revalida contra `ai.google.dev/gemini-api/docs/pricing`
   antes de subir de generación, no asumas.
-  <!-- verify: grep -q 'GEMINI_MODEL = "gemini-3.8-flash"' /opt/lyai/app/lyai-prensa/pipeline/gemini.py -->
+  <!-- verify: sed -n '/^GEMINI_MODELS = \[/,/^\]/p' /opt/lyai/app/lyai-prensa/pipeline/gemini.py | grep -q gemini-3.8-flash -->
 - **Rate limit real del tier gratuito**: ~20 req/min (confirmado por un 429 con
   `generate_content_free_tier_requests, limit: 20`). Los tres scripts pacean con
   `SLEEP_ENTRE_LLAMADAS` (~3.5s) entre llamadas — no lo quites, un lote de más de un puñado
