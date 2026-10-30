@@ -1,0 +1,38 @@
+.ls-ao {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.ls-ao-catch {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0);
+  transition: background 0.3s ease;
+}
+
+.ls-ao-catch.is-dim {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.ls-ao-card {
+  position: absolute;
+  width: var(--ls-ao-w, 300px);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  transition: left 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: ls-ao-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes ls-ao-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-ao-card { transition-duration: 0.01s; animation-duration: 0.01s; }
+}

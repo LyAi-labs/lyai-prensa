@@ -1,0 +1,133 @@
+Aquí está el código completo del sistema SpotlightCard — CSS + JS Vanilla puro, cero dependencias:
+
+CSS (pseudo-elementos ::before / ::after)
+```css
+/* ─── SpotlightCard System ────────────────────────────────────────────────
+   Haz de luz cónico que sigue el cursor.
+   CSS custom props --mx/--my inyectadas por JS.
+   Solo "background" cambia → cero layout/paint → 60 FPS garantizados.
+──────────────────────────────────────────────────────────────────────────── */
+.spotlight-card {
+    position: relative;
+    overflow: hidden;
+}
+/* Haz de luz interior */
+.spotlight-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    background: radial-gradient(
+        600px circle at var(--mx, 50%) var(--my, 50%),
+        rgba(var(--spotlight-rgb, 99, 102, 241), 0.13) 0%,
+        rgba(var(--spotlight-rgb, 99, 102, 241), 0.04) 40%,
+        transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+    will-change: background;
+}
+.spotlight-card:hover::before { opacity: 1; }
+/* Borde perimetral reactivo al cursor */
+.spotlight-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid transparent;
+    background: radial-gradient(
+        400px circle at var(--mx, 50%) var(--my, 50%),
+        rgba(var(--spotlight-rgb, 99, 102, 241), 0.45),
+        transparent 60%
+    ) border-box;
+    -webkit-mask:
+        linear-gradient(#fff 0 0) padding-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    z-index: 0;
+}
+.spotlight-card:hover::after { opacity: 1; }
+/* El contenido queda encima del spotlight */
+.spotlight-card > * { position: relative; z-index: 1; }
+/* Variantes de color */
+.spotlight-card.spc-purple  { --spotlight-rgb: 192, 132, 252; }
+.spotlight-card.spc-cyan    { --spotlight-rgb: 34,  211, 238; }
+.spotlight-card.spc-amber   { --spotlight-rgb: 245, 158, 11;  }
+.spotlight-card.spc-emerald { --spotlight-rgb: 52,  211, 153; }
+.spotlight-card.spc-rose    { --spotlight-rgb: 244, 63,  94;  }
+.spotlight-card.spc-blue    { --spotlight-rgb: 96,  165, 250; }
+.spotlight-card.spc-fuchsia { --spotlight-rgb: 232, 121, 249; }
+```
+
+JS — initSpotlightCards()
+```js
+/**
+ * initSpotlightCards()
+ *
+ * Registra un único listener de mousemove por tarjeta usando
+ * AbortController para limpieza correcta si se llama de nuevo.
+ *
+ * Coste por frame: 2x setProperty() → O(1), sin reflows.
+ * Compatible con cualquier scroll/zoom: coordenadas relativas
+ * al elemento via getBoundingClientRect().
+ */
+function initSpotlightCards() {
+    // Limpia listeners anteriores si los hubiera
+    if (window._spotlightControllers) {
+        window._spotlightControllers.forEach(c => c.abort());
+    }
+    window._spotlightControllers = [];
+    document.querySelectorAll('.spotlight-card').forEach(card => {
+        const ctrl = new AbortController();
+        window._spotlightControllers.push(ctrl);
+        card.addEventListener('mousemove', (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
+            const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
+            card.style.setProperty('--mx', `${x}%`);
+            card.style.setProperty('--my', `${y}%`);
+        }, { signal: ctrl.signal, passive: true });
+        // Reset al salir (cursor centrado → fade suave)
+        card.addEventListener('mouseleave', () => {
+            card.style.setProperty('--mx', '50%');
+            card.style.setProperty('--my', '50%');
+        }, { signal: ctrl.signal, passive: true });
+    });
+}
+```
+
+Uso en HTML
+```html
+<!-- Aplicar clase + variante de color -->
+<div class="spotlight-card spc-cyan rounded-2xl p-4 bg-zinc-900 border border-white/[0.07]">
+    <h3>Título</h3>
+    <p>Contenido…</p>
+</div>
+<!-- Llamar tras montar el DOM -->
+<script>
+    document.addEventListener('DOMContentLoaded', initSpotlightCards);
+    // Re-llamar si se inyectan cards dinámicamente:
+    // setAudioDeckDisplayMode('bento') → initSpotlightCards()
+</script>
+```
+
+Principio de funcionamiento
+```
+mousemove → getBoundingClientRect() → coordenadas relativas (%)
+    ↓
+setProperty('--mx', x%)  setProperty('--my', y%)
+    ↓
+CSS ::before recalcula radial-gradient en GPU
+(solo "background" cambia → sin layout/paint → 60 FPS)
+    ↓
+::after hace lo mismo pero sobre "border-box" con mask-composite
+→ borde perimetral iluminado en el punto más cercano al cursor
+```
+
+Invariante crítico: `passive: true` en mousemove — nunca bloquea el hilo principal. El `AbortController` garantiza cero fugas de listeners si se re-inicializa.

@@ -1,0 +1,15 @@
+# Backups del Postgres dedicado de prensa (contenedor lyai_prensa_postgres).
+#
+# Van en el crontab del USUARIO lyai (`crontab -e`), no en /etc/cron.d: estos
+# scripts viven en un repo que editan varios agentes y no deben correr como root.
+# lyai está en el grupo docker, que es todo lo que necesitan.
+#
+# Los dumps quedan en /opt/lyai/backups/prensa/ (14 días). OJO: esa carpeta NO
+# la recoge el espejo que sale del servidor (backup-local-mirror.sh solo mira
+# /opt/lyai/backups/auto con una lista fija de patrones).
+
+# Dump completo cada 6 h (a y 20, para no coincidir con el de lyai_db, que va en punto)
+20 0,6,12,18 * * * /opt/lyai/app/lyai-prensa/ops/postgres-backup.sh >> /var/log/lyai/prensa-backup.log 2>&1
+
+# Restore-test semanal (domingo 05:20 UTC): un backup no existe hasta que restaura
+20 5 * * 0 /opt/lyai/app/lyai-prensa/ops/postgres-verify-backup.sh >> /var/log/lyai/prensa-backup.log 2>&1

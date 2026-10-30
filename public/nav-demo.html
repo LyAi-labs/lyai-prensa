@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LyAi Prensa · Demo Navegación</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #080a0f;
+      color: #fff;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* ── Selector de opciones ── */
+    #selector {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      gap: 6px;
+      padding: 12px 16px;
+      background: rgba(8,10,15,0.92);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      backdrop-filter: blur(12px);
+    }
+    #selector h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.4);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-right: 8px;
+      align-self: center;
+      white-space: nowrap;
+    }
+    .opt-btn {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.6);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      transition: all .2s;
+      text-align: center;
+    }
+    .opt-btn:hover { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.25); }
+    .opt-btn.active { background: rgba(0,229,255,0.12); color: #00e5ff; border-color: #00e5ff; }
+
+    /* ── Muro de ejemplo ── */
+    #stage {
+      position: fixed;
+      top: 54px; left: 0; right: 0; bottom: 0;
+      overflow: hidden;
+      cursor: grab;
+    }
+    #stage:active { cursor: grabbing; }
+
+    #wall {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      display: flex;
+      gap: 14px;
+      padding: 0 80px;
+      will-change: transform;
+      transition: opacity .5s;
+    }
+
+    .col { display: flex; flex-direction: column; gap: 14px; }
+
+    .card {
+      width: 240px;
+      height: 155px;
+      background: #12151c;
+      border-radius: 10px;
+      padding: 14px;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--accent);
+    }
+    .card .source {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .card .headline {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f0f2f8;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .card .time {
+      position: absolute;
+      bottom: 10px; right: 12px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+    }
+    .card.contra {
+      box-shadow: inset 0 0 0 1.5px #ffb020;
+    }
+    .card.contra::after {
+      content: '⚡';
+      position: absolute;
+      bottom: 8px; left: 12px;
+      font-size: 11px;
+    }
+
+    /* ── Fade lateral (siempre) ── */
+    .fade-left, .fade-right {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 120px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .fade-left  { left: 0;  background: linear-gradient(to right, #080a0f, transparent); }
+    .fade-right { right: 0; background: linear-gradient(to left,  #080a0f, transparent); }
+
+    /* ── OPCIÓN 1: Scroll infinito ── */
+    #glow-edge {
+      display: none;
+      position: absolute;
+      right: 0; top: 0; bottom: 0;
+      width: 60px;
+      background: linear-gradient(to left, rgba(0,229,255,0.25), transparent);
+      pointer-events: none;
+      z-index: 20;
+      animation: pulse-glow 1.8s ease-in-out infinite;
+    }
+    #loading-hint {
+      display: none;
+      position: absolute;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px;
+      color: #00e5ff;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0;
+      z-index: 21;
+      transition: opacity .4s;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
+    /* ── OPCIÓN 2: Cinta de película ── */
+    #timeline-bar {
+      display: none;
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 36px;
+      background: rgba(8,10,15,0.7);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(255,255,255,0.05);
+      z-index: 30;
+      align-items: center;
+      padding: 0 80px;
+      gap: 12px;
+    }
+    #timeline-bar .tl-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+    #timeline-track {
+      flex: 1;
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      position: relative;
+    }
+    #timeline-fill {
+      height: 100%;
+      width: 12%;
+      background: linear-gradient(to right, #a855f7, #00e5ff);
+      border-radius: 2px;
+      transition: width .4s;
+    }
+    #timeline-dot {
+      position: absolute;
+      right: -4px; top: -4px;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      background: #00e5ff;
+      box-shadow: 0 0 8px #00e5ff;
+      animation: pulse-dot 2s infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 6px #00e5ff; }
+      50% { box-shadow: 0 0 16px #00e5ff, 0 0 32px rgba(0,229,255,0.4); }
+    }
+    #timeline-page {
+      font-size: 10px;
+      color: #00e5ff;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    /* ── OPCIÓN 3: Hover Reveal ── */
+    .hover-arrow {
+      display: none;
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 60px;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 30;
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    #hover-left  { left: 0; }
+    #hover-right { right: 0; }
+    .hover-arrow:hover { opacity: 1 !important; }
+    .hover-arrow svg {
+      width: 28px; height: 28px;
+      stroke: #00e5ff;
+      fill: none;
+      stroke-width: 1.5;
+      filter: drop-shadow(0 0 8px #00e5ff);
+    }
+
+    /* ── OPCIÓN 4: Toast + Teclado ── */
+    #toast {
+      display: none;
+      position: absolute;
+      bottom: 24px; right: 24px;
+      background: rgba(15,20,35,0.88);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 12px 16px;
+      z-index: 40;
+      align-items: center;
+      gap: 10px;
+      animation: toast-in .4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(12px) scale(0.96); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.7);
+    }
+    #toast span {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+    }
+    #key-flash {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,229,255,0.04);
+      border-radius: inherit;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .1s;
+    }
+    #page-indicator-toast {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 56px;
+      font-weight: 800;
+      color: rgba(0,229,255,0.08);
+      letter-spacing: -0.02em;
+      pointer-events: none;
+      z-index: 5;
+      transition: opacity .5s;
+    }
+
+    /* ── OPCIÓN 5: Portal 3D ── */
+    #portal-right, #portal-left {
+      display: none;
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 80px;
+      pointer-events: auto;
+      cursor: pointer;
+      z-index: 30;
+      align-items: center;
+      justify-content: center;
+    }
+    #portal-right { right: 0; }
+    #portal-left  { left: 0; }
+    .portal-beam {
+      width: 3px;
+      height: 70%;
+      border-radius: 3px;
+      position: relative;
+    }
+    #portal-right .portal-beam { background: linear-gradient(to bottom, transparent, #00e5ff, #a855f7, transparent); }
+    #portal-left  .portal-beam { background: linear-gradient(to bottom, transparent, #a855f7, #00e5ff, transparent); }
+    .portal-beam::before, .portal-beam::after {
+      content: '';
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      animation: portal-pulse 2s ease-in-out infinite;
+    }
+    .portal-beam::before {
+      width: 40px; height: 40px;
+      background: radial-gradient(circle, rgba(0,229,255,0.15), transparent 70%);
+    }
+    .portal-beam::after {
+      width: 80px; height: 80px;
+      background: radial-gradient(circle, rgba(168,85,247,0.1), transparent 70%);
+      animation-delay: .6s;
+    }
+    @keyframes portal-pulse {
+      0%, 100% { opacity: 0.4; transform: translate(-50%,-50%) scale(1); }
+      50% { opacity: 1; transform: translate(-50%,-50%) scale(1.3); }
+    }
+    .portal-particles {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .particle {
+      position: absolute;
+      width: 2px; height: 2px;
+      border-radius: 50%;
+      background: #00e5ff;
+      animation: float-particle linear infinite;
+    }
+    @keyframes float-particle {
+      0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { transform: translateY(-100px) scale(1); opacity: 0; }
+    }
+    .portal-label {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(0,229,255,0.6);
+      white-space: nowrap;
+    }
+
+    /* ── Transition overlay ── */
+    #transition-overlay {
+      position: fixed;
+      inset: 0;
+      background: #080a0f;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .35s;
+    }
+
+    /* ── Page badge ── */
+    #page-badge {
+      position: absolute;
+      top: 14px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: rgba(255,255,255,0.25);
+      letter-spacing: 0.05em;
+      z-index: 50;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Selector -->
+<div id="selector">
+  <h2>Modo nav</h2>
+  <button class="opt-btn active" data-mode="1" onclick="setMode(1)">① Scroll infinito</button>
+  <button class="opt-btn" data-mode="2" onclick="setMode(2)">② Cinta de película</button>
+  <button class="opt-btn" data-mode="3" onclick="setMode(3)">③ Hover reveal</button>
+  <button class="opt-btn" data-mode="4" onclick="setMode(4)">④ Toast + teclado</button>
+  <button class="opt-btn" data-mode="5" onclick="setMode(5)">⑤ Portal 3D</button>
+</div>
+
+<!-- Stage -->
+<div id="stage">
+  <div class="fade-left"></div>
+  <div class="fade-right"></div>
+  <div id="page-badge">Página 1 / 38</div>
+
+  <!-- Muro de tarjetas -->
+  <div id="wall"></div>
+
+  <!-- Modo 1 -->
+  <div id="glow-edge"></div>
+  <div id="loading-hint">Cargando más →</div>
+
+  <!-- Modo 2 -->
+  <div id="timeline-bar">
+    <span class="tl-label">15 Sep</span>
+    <div id="timeline-track">
+      <div id="timeline-fill"><div id="timeline-dot"></div></div>
+    </div>
+    <span class="tl-label">17 Sep</span>
+    <span id="timeline-page">Pág 1</span>
+  </div>
+
+  <!-- Modo 3 -->
+  <div class="hover-arrow" id="hover-left" onclick="changePage(-1)">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+  <div class="hover-arrow" id="hover-right" onclick="changePage(1)">
+    <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>
+
+  <!-- Modo 4 -->
+  <div id="toast">
+    <div id="key-flash"></div>
+    <div class="kbd">←</div>
+    <div class="kbd">→</div>
+    <span>para navegar entre páginas</span>
+  </div>
+  <div id="page-indicator-toast"></div>
+
+  <!-- Modo 5 -->
+  <div id="portal-left" onclick="changePage(-1)">
+    <div class="portal-particles" id="particles-left"></div>
+    <div class="portal-beam"></div>
+    <div class="portal-label">← Anterior</div>
+  </div>
+  <div id="portal-right" onclick="changePage(1)">
+    <div class="portal-particles" id="particles-right"></div>
+    <div class="portal-beam"></div>
+    <div class="portal-label">Siguiente →</div>
+  </div>
+</div>
+
+<!-- Transition overlay -->
+<div id="transition-overlay"></div>
+
+<script>
+  // ── Datos de ejemplo ──
+  const SOURCES = [
+    { name: 'El País',       color: '#a82c2c' },
+    { name: 'El Mundo',      color: '#cc0000' },
+    { name: 'ABC',           color: '#e2231a' },
+    { name: 'RTVE',          color: '#0099ff' },
+    { name: 'La Vanguardia', color: '#002b49' },
+    { name: 'Expansión',     color: '#005291' },
+    { name: 'Marca',         color: '#cf0a2c' },
+    { name: 'elDiario.es',   color: '#e63946' },
+    { name: 'COPE',          color: '#0c2340' },
+    { name: 'La SER',        color: '#d50000' },
+    { name: 'Libertad Dig.', color: '#0d3b66' },
+    { name: 'Público',       color: '#c0392b' },
+  ]
+  const HEADLINES = [
+    'El Gobierno aprueba el nuevo presupuesto con apoyo de los socios de investidura',
+    'El Banco de España alerta: la inflación superará el 4% en el último trimestre',
+    'El Madrid golea 4-0 al Barça en el Clásico más intenso de los últimos años',
+    'La DANA deja 23 muertos y miles de evacuados en el Levante español',
+    'Sánchez anuncia una rebaja del IRPF para rentas inferiores a 22.000 euros',
+    'El paro baja en 45.000 personas en agosto, mejor dato en 15 años',
+    'La oposición exige explicaciones por el contrato de emergencia de 200 millones',
+    'Feijóo pide elecciones anticipadas tras la derrota del gobierno en el Congreso',
+    'Tesla anuncia una gigafactory en Sagunto: 3.000 empleos directos',
+    'El Supremo tumba la ley de vivienda: inconstitucional en 8 artículos clave',
+    'La selección española clasifica para el Mundial con 10 victorias seguidas',
+    'Récord histórico: el Ibex supera los 14.000 puntos por primera vez',
+  ]
+
+  let page = 0
+  let mode = 1
+  const TOTAL_PAGES = 38
+
+  // ── Generar muro ──
+  function buildWall() {
+    const wall = document.getElementById('wall')
+    wall.innerHTML = ''
+    const COLS = 28, ROWS = 3
+    for (let c = 0; c < COLS; c++) {
+      const col = document.createElement('div')
+      col.className = 'col'
+      for (let r = 0; r < ROWS; r++) {
+        const idx = (page * COLS * ROWS + c * ROWS + r) % SOURCES.length
+        const src = SOURCES[idx]
+        const hl  = HEADLINES[(page * COLS * ROWS + c * ROWS + r) % HEADLINES.length]
+        const contra = Math.random() < 0.08
+        const card = document.createElement('div')
+        card.className = 'card' + (contra ? ' contra' : '')
+        card.style.setProperty('--accent', src.color)
+        card.innerHTML = `
+          <div class="source">${src.name}</div>
+          <div class="headline">${hl}</div>
+          <div class="time">hace ${Math.floor(Math.random()*8)+1}h</div>
+        `
+        col.appendChild(card)
+      }
+      wall.appendChild(col)
+    }
+  }
+
+  // ── Cambio de página con transición ──
+  async function changePage(delta) {
+    const newPage = Math.max(0, Math.min(TOTAL_PAGES - 1, page + delta))
+    if (newPage === page) return
+    page = newPage
+
+    const overlay = document.getElementById('transition-overlay')
+    overlay.style.opacity = '1'
+    overlay.style.pointerEvents = 'auto'
+    await new Promise(r => setTimeout(r, 350))
+    buildWall()
+    updateUI()
+    wallX = 0
+    renderX = 0
+    overlay.style.opacity = '0'
+    overlay.style.pointerEvents = 'none'
+  }
+
+  function updateUI() {
+    document.getElementById('page-badge').textContent = `Página ${page + 1} / ${TOTAL_PAGES}`
+    // Modo 2 timeline
+    const pct = ((page + 1) / TOTAL_PAGES * 100).toFixed(1)
+    document.getElementById('timeline-fill').style.width = pct + '%'
+    document.getElementById('timeline-page').textContent = `Pág ${page + 1}`
+    // Modo 4 big number
+    document.getElementById('page-indicator-toast').textContent = page + 1
+  }
+
+  // ── Arrastrar ──
+  let wallX = 0, renderX = 0, velX = 0, dragging = false, lastPX = 0, startPX = 0
+  const wall = document.getElementById('wall')
+
+  const stage = document.getElementById('stage')
+  stage.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return
+    dragging = true; velX = 0
+    lastPX = startPX = e.clientX
+    stage.setPointerCapture(e.pointerId)
+  })
+  window.addEventListener('pointermove', e => {
+    if (!dragging) return
+    const dx = e.clientX - lastPX
+    lastPX = e.clientX
+    wallX += dx
+
+    // Modo 1: detectar borde
+    if (mode === 1) {
+      const wallEl = document.getElementById('wall')
+      const stageW = stage.clientWidth
+      const wallRight = wallEl.getBoundingClientRect().right
+      const nearEdge = wallRight - stageW < 160
+      document.getElementById('glow-edge').style.display = nearEdge ? 'block' : 'none'
+      const hint = document.getElementById('loading-hint')
+      hint.style.display = nearEdge ? 'block' : 'none'
+      hint.style.opacity = nearEdge ? '1' : '0'
+    }
+  })
+  window.addEventListener('pointerup', e => {
+    if (!dragging) return
+    dragging = false
+    const dist = Math.abs(e.clientX - startPX)
+    velX = (e.clientX - lastPX) * 4
+
+    // Modo 1: si arrastró mucho a la izquierda => cambiar página
+    if (mode === 1 && wallX < -window.innerWidth * 0.6) {
+      changePage(1)
+    }
+  })
+
+  // Inercia
+  function tick() {
+    requestAnimationFrame(tick)
+    if (!dragging) {
+      wallX += velX
+      velX *= 0.92
+      if (Math.abs(velX) < 0.3) velX = 0
+    }
+    renderX += (wallX - renderX) * 0.12
+    wall.style.transform = `translateX(${renderX}px) translateY(-50%)`
+  }
+  tick()
+
+  // Modo 3: hover reveal con intensidad según posición
+  stage.addEventListener('mousemove', e => {
+    if (mode !== 3) return
+    const lArrow = document.getElementById('hover-left')
+    const rArrow = document.getElementById('hover-right')
+    const pct = e.clientX / stage.clientWidth
+    lArrow.style.opacity = Math.max(0, (0.15 - pct) / 0.15).toFixed(2)
+    rArrow.style.opacity = Math.max(0, (pct - 0.85) / 0.15).toFixed(2)
+  })
+  stage.addEventListener('mouseleave', () => {
+    document.getElementById('hover-left').style.opacity = '0'
+    document.getElementById('hover-right').style.opacity = '0'
+  })
+
+  // Modo 4: teclado
+  window.addEventListener('keydown', e => {
+    if (mode !== 4) return
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      flashKey(); changePage(1)
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      flashKey(); changePage(-1)
+    }
+  })
+  function flashKey() {
+    const kf = document.getElementById('key-flash')
+    kf.style.opacity = '1'
+    const pi = document.getElementById('page-indicator-toast')
+    pi.style.opacity = '1'
+    setTimeout(() => {
+      kf.style.opacity = '0'
+      pi.style.opacity = '0'
+    }, 300)
+  }
+
+  // Modo 5: partículas portal
+  function spawnParticles(containerId) {
+    const c = document.getElementById(containerId)
+    c.innerHTML = ''
+    for (let i = 0; i < 12; i++) {
+      const p = document.createElement('div')
+      p.className = 'particle'
+      p.style.left = (20 + Math.random() * 60) + '%'
+      p.style.animationDuration = (3 + Math.random() * 4) + 's'
+      p.style.animationDelay = (Math.random() * 4) + 's'
+      p.style.background = Math.random() > 0.5 ? '#00e5ff' : '#a855f7'
+      c.appendChild(p)
+    }
+  }
+
+  // ── Cambiar modo ──
+  function setMode(m) {
+    mode = m
+    document.querySelectorAll('.opt-btn').forEach(b => b.classList.toggle('active', +b.dataset.mode === m))
+
+    // Ocultar todo
+    const all = ['glow-edge','loading-hint','timeline-bar','hover-left','hover-right','toast','page-indicator-toast','portal-left','portal-right']
+    all.forEach(id => document.getElementById(id).style.display = 'none')
+    document.getElementById('stage').style.paddingBottom = '0'
+
+    if (m === 1) {
+      // Nada visible hasta borde
+    }
+    if (m === 2) {
+      document.getElementById('timeline-bar').style.display = 'flex'
+      updateUI()
+    }
+    if (m === 3) {
+      document.getElementById('hover-left').style.display = 'flex'
+      document.getElementById('hover-right').style.display = 'flex'
+    }
+    if (m === 4) {
+      document.getElementById('toast').style.display = 'flex'
+      document.getElementById('page-indicator-toast').style.display = 'block'
+    }
+    if (m === 5) {
+      document.getElementById('portal-left').style.display = 'flex'
+      document.getElementById('portal-right').style.display = 'flex'
+      spawnParticles('particles-left')
+      spawnParticles('particles-right')
+    }
+  }
+
+  // ── Init ──
+  buildWall()
+  updateUI()
+  setMode(1)
+</script>
+</body>
+</html>
